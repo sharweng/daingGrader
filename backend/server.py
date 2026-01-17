@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import io
 import os
+import json
 from pathlib import Path
 from starlette.responses import StreamingResponse
 from datetime import datetime
@@ -29,6 +30,28 @@ app = FastAPI()
 DATASET_DIR = Path("dataset")
 DATASET_DIR.mkdir(exist_ok=True)
 
+# History log file for scanned images
+HISTORY_FILE = Path("history_log.json")
+
+def _read_history_entries():
+  if not HISTORY_FILE.exists():
+    return []
+  try:
+    with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+      return json.load(f)
+  except json.JSONDecodeError:
+    return []
+
+def _write_history_entries(entries):
+  with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+    json.dump(entries, f, indent=2)
+
+def add_history_entry(entry):
+  entries = _read_history_entries()
+  entries.insert(0, entry)
+  # keep latest 200 entries
+  _write_history_entries(entries[:200])
+
 @app.post("/analyze")
 async def analyze_fish(file: UploadFile = File(...)):
   print("Received an image from the app!") 
@@ -43,9 +66,38 @@ async def analyze_fish(file: UploadFile = File(...)):
   cv2.rectangle(img, (50, 50), (width - 50, height - 50), (0, 255, 0), 5)
   cv2.putText(img, "SERVER CONNECTED", (60, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-  # 3. SEND BACK PROCESSED IMAGE
-  _, encoded_img = cv2.imencode('.jpg', img)
-  return StreamingResponse(io.BytesIO(encoded_img.tobytes()), media_type="image/jpeg")
+  # 3. SEND BACK PROCESSED IMAGE + STORE HISTORY
+  success, encoded_img = cv2.imencode('.jpg', img)
+  if not success:
+    raise ValueError("Failed to encode image")
+
+  image_bytes = encoded_img.tobytes()
+
+  # Upload analyzed photo to Cloudinary history bucket
+  try:
+    now = datetime.now()
+    date_folder = now.strftime("%Y-%m-%d")
+    history_folder = f"daing-history/{date_folder}"
+    history_id = f"scan_{now.strftime('%Y%m%d_%H%M%S_%f')}"
+
+    upload_result = cloudinary.uploader.upload(
+      image_bytes,
+      folder=history_folder,
+      public_id=history_id,
+      resource_type="image"
+    )
+
+    add_history_entry({
+      "id": history_id,
+      "timestamp": now.isoformat(),
+      "url": upload_result.get("secure_url"),
+      "folder": history_folder,
+    })
+    print(f"📚 History saved: {history_folder}/{history_id}")
+  except Exception as history_error:
+    print(f"⚠️ Failed to upload history image: {history_error}")
+
+  return StreamingResponse(io.BytesIO(image_bytes), media_type="image/jpeg")
 
 @app.post("/upload-dataset")
 async def upload_dataset(
@@ -114,3 +166,11 @@ async def upload_dataset(
       "status": "error",
       "message": f"Failed to upload to Cloudinary: {str(e)}"
     }
+
+
+@app.get("/history")
+def get_history():
+  return {
+    "status": "success",
+    "entries": _read_history_entries()
+  }

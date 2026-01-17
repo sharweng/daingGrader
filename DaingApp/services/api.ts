@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { FishType, Condition } from "../types";
+import type { FishType, Condition, HistoryEntry } from "../types";
 
 export const analyzeFish = async (
   imageUri: string,
@@ -80,5 +80,21 @@ export const uploadDataset = async (
       message: "Network error",
       error: error.message || "Failed to connect to server",
     };
+  }
+};
+
+export const fetchHistory = async (
+  historyUrl: string
+): Promise<HistoryEntry[]> => {
+  try {
+    const response = await axios.get(historyUrl);
+    const entries = response.data?.entries;
+    if (Array.isArray(entries)) {
+      return entries as HistoryEntry[];
+    }
+    return [];
+  } catch (error) {
+    console.error("Failed to fetch history", error);
+    throw new Error("Unable to load history");
   }
 };

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { View, Button, Alert } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { commonStyles } from "../styles/common";
@@ -26,6 +26,10 @@ export default function Index() {
   const [showSettings, setShowSettings] = useState(false);
   const [devMode, setDevMode] = useState(false);
   const [serverBaseUrl, setServerBaseUrl] = useState(DEFAULT_SERVER_BASE_URL);
+  const serverUrls = useMemo(
+    () => getServerUrls(serverBaseUrl),
+    [serverBaseUrl]
+  );
 
   // Data Gathering Mode
   const [fishType, setFishType] = useState<FishType>("danggit");
@@ -57,8 +61,7 @@ export default function Index() {
     setLoading(true);
 
     try {
-      const urls = getServerUrls(serverBaseUrl);
-      const result = await analyzeFish(capturedImage, urls.analyze);
+      const result = await analyzeFish(capturedImage, serverUrls.analyze);
       setResultImage(result);
     } catch (error) {
       console.error("Server Error:", error);
@@ -76,12 +79,11 @@ export default function Index() {
     setLoading(true);
 
     try {
-      const urls = getServerUrls(serverBaseUrl);
       const result = await uploadDataset(
         capturedImage,
         fishType,
         condition,
-        urls.uploadDataset
+        serverUrls.uploadDataset
       );
 
       if (result.success) {
@@ -143,7 +145,12 @@ export default function Index() {
   }
 
   if (currentScreen === "history") {
-    return <HistoryScreen onNavigate={setCurrentScreen} />;
+    return (
+      <HistoryScreen
+        onNavigate={setCurrentScreen}
+        historyUrl={serverUrls.history}
+      />
+    );
   }
 
   if (currentScreen === "dataset") {

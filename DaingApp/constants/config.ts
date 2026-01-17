@@ -5,6 +5,7 @@ export const DEFAULT_SERVER_BASE_URL = "http://192.168.1.108:8000";
 export const getServerUrls = (baseUrl: string) => ({
   analyze: `${baseUrl}/analyze`,
   uploadDataset: `${baseUrl}/upload-dataset`,
+  history: `${baseUrl}/history`,
 });
 
 // Fish types available in the app
