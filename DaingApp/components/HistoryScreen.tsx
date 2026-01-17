@@ -8,7 +8,6 @@ import {
   Image,
   Alert,
   ScrollView,
-  Modal,
   Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -93,11 +92,6 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
     loadHistory();
   }, [loadHistory]);
 
-  const showEmpty = !loading && entries.length === 0;
-  const formattedModalTimestamp = selectedEntry
-    ? new Date(selectedEntry.timestamp).toLocaleString()
-    : "";
-
   const handleDeleteEntry = useCallback(
     async (entry: HistoryEntry) => {
       if (isDeleting) return;
@@ -105,9 +99,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
       try {
         await deleteHistoryEntry(historyUrl, entry.id);
         setEntries((prev) => prev.filter((item) => item.id !== entry.id));
-        if (selectedEntry?.id === entry.id) {
-          setSelectedEntry(null);
-        }
+        setSelectedEntry(null);
       } catch (error) {
         Alert.alert(
           "Delete Failed",
@@ -117,7 +109,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
         setIsDeleting(false);
       }
     },
-    [historyUrl, isDeleting, selectedEntry]
+    [historyUrl, isDeleting]
   );
 
   const confirmDelete = useCallback(
@@ -133,6 +125,52 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
     },
     [handleDeleteEntry]
   );
+
+  const showEmpty = !loading && entries.length === 0;
+
+  // If viewing a specific entry, show full-screen view instead of grid
+  if (selectedEntry) {
+    const formattedTimestamp = new Date(
+      selectedEntry.timestamp
+    ).toLocaleString();
+
+    return (
+      <View style={commonStyles.container}>
+        <View style={commonStyles.screenHeader}>
+          <TouchableOpacity onPress={() => setSelectedEntry(null)}>
+            <Ionicons name="arrow-back" size={28} color="white" />
+          </TouchableOpacity>
+          <Text style={commonStyles.screenTitle}>{formattedTimestamp}</Text>
+          <TouchableOpacity onPress={() => confirmDelete(selectedEntry)}>
+            <Ionicons name="trash" size={24} color="#f87171" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={commonStyles.previewContainer}>
+          <Image
+            source={{ uri: selectedEntry.url }}
+            style={commonStyles.previewImage}
+          />
+        </View>
+
+        <View style={commonStyles.bottomButtonBar}>
+          <TouchableOpacity
+            style={[commonStyles.bottomButton, { backgroundColor: "#1f2a44" }]}
+            onPress={() => setSelectedEntry(null)}
+          >
+            <Text style={commonStyles.bottomButtonText}>Close</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[commonStyles.bottomButton, { backgroundColor: "#dc2626" }]}
+            onPress={() => confirmDelete(selectedEntry)}
+            disabled={isDeleting}
+          >
+            <Text style={commonStyles.bottomButtonText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={commonStyles.container}>
@@ -212,52 +250,6 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
           </ScrollView>
         )}
       </View>
-
-      <Modal
-        visible={!!selectedEntry}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        onRequestClose={() => setSelectedEntry(null)}
-      >
-        {selectedEntry && (
-          <View style={historyStyles.fullScreenContainer}>
-            <View style={historyStyles.fullScreenHeader}>
-              <TouchableOpacity onPress={() => setSelectedEntry(null)}>
-                <Ionicons name="arrow-back" size={28} color="white" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => confirmDelete(selectedEntry)}>
-                <Ionicons name="trash" size={24} color="#f87171" />
-              </TouchableOpacity>
-            </View>
-
-            <Image
-              source={{ uri: selectedEntry.url }}
-              style={historyStyles.fullScreenImage}
-            />
-
-            <View style={historyStyles.fullScreenMeta}>
-              <Text style={historyStyles.fullScreenTimestamp}>
-                {formattedModalTimestamp}
-              </Text>
-            </View>
-
-            <View style={historyStyles.actionButtons}>
-              <TouchableOpacity
-                style={[historyStyles.actionButton, historyStyles.closeButton]}
-                onPress={() => setSelectedEntry(null)}
-              >
-                <Text style={historyStyles.actionText}>Close</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[historyStyles.actionButton, historyStyles.deleteButton]}
-                onPress={() => confirmDelete(selectedEntry)}
-              >
-                <Text style={historyStyles.actionText}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-      </Modal>
     </View>
   );
 };

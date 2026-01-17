@@ -68,9 +68,9 @@ export const homeStyles = StyleSheet.create({
   },
   secondaryButton: {
     backgroundColor: "#1e293b",
-    paddingVertical: 18,
-    paddingHorizontal: 25,
-    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     flex: 1,
