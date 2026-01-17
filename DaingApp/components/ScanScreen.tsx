@@ -87,20 +87,30 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
               style={commonStyles.previewImage}
             />
             {loading ? (
-              <ActivityIndicator size="large" color="#00ff00" />
+              <ActivityIndicator
+                size="large"
+                color="#00ff00"
+                style={{ position: "absolute" }}
+              />
             ) : (
-              <View style={commonStyles.row}>
+              <View style={commonStyles.bottomButtonBar}>
                 <TouchableOpacity
-                  style={[commonStyles.button, { backgroundColor: "red" }]}
+                  style={[
+                    commonStyles.bottomButton,
+                    { backgroundColor: "#dc2626" },
+                  ]}
                   onPress={onReset}
                 >
-                  <Text style={commonStyles.text}>Retake</Text>
+                  <Text style={commonStyles.bottomButtonText}>Retake</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[commonStyles.button, { backgroundColor: "green" }]}
+                  style={[
+                    commonStyles.bottomButton,
+                    { backgroundColor: "#16a34a" },
+                  ]}
                   onPress={onAnalyze}
                 >
-                  <Text style={commonStyles.text}>Analyze</Text>
+                  <Text style={commonStyles.bottomButtonText}>Analyze</Text>
                 </TouchableOpacity>
               </View>
             )}

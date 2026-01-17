@@ -49,7 +49,6 @@ export const commonStyles = StyleSheet.create({
     alignSelf: "stretch",
     aspectRatio: 3 / 4,
     resizeMode: "contain",
-    marginBottom: 20,
   },
   button: {
     padding: 15,
@@ -64,6 +63,29 @@ export const commonStyles = StyleSheet.create({
   },
   row: {
     flexDirection: "row",
+  },
+  bottomButtonBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 8,
+    paddingBottom: 30,
+    backgroundColor: "black",
+  },
+  bottomButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bottomButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "white",
   },
   resultHeader: {
     fontSize: 20,

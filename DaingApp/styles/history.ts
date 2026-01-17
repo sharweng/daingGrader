@@ -9,23 +9,25 @@ export const historyStyles = StyleSheet.create({
     paddingBottom: 40,
   },
   dateSection: {
-    marginBottom: 28,
+    marginBottom: 20,
   },
   dateHeader: {
     color: "#cbd5f5",
     fontSize: 16,
     fontWeight: "600",
+    marginTop: 16,
+    marginBottom: 8,
   },
   gridRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 12,
+    marginTop: 4,
   },
   square: {
-    borderRadius: 12,
+    borderRadius: 0,
     backgroundColor: "#0f172a",
     overflow: "hidden",
-    marginBottom: 10,
+    marginBottom: 4,
   },
   squareImage: {
     width: "100%",
@@ -101,7 +103,7 @@ export const historyStyles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 60,
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 16,
     backgroundColor: "#0a0e27",
   },
   fullScreenImage: {
@@ -119,15 +121,20 @@ export const historyStyles = StyleSheet.create({
     fontSize: 15,
   },
   actionButtons: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 20,
+    gap: 8,
+    paddingHorizontal: 8,
     paddingBottom: 30,
+    backgroundColor: "#020617",
   },
   actionButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 16,
+    borderRadius: 8,
     alignItems: "center",
   },
   closeButton: {
@@ -138,7 +145,7 @@ export const historyStyles = StyleSheet.create({
   },
   actionText: {
     color: "white",
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "600",
   },
 });
