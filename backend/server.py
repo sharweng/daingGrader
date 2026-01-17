@@ -5,13 +5,27 @@ import io
 import os
 from pathlib import Path
 from starlette.responses import StreamingResponse
+from datetime import datetime
+import cloudinary
+import cloudinary.uploader
+from dotenv import load_dotenv
 
-# install command = py -3.12 -m pip install fastapi uvicorn python-multipart numpy opencv-python
-# running command = py -3.12 -m uvicorn server:app --host 0.0.0.0 --port 8000   
+# install command = pip install -r backend/requirements.txt
+# running command = py -3.12 -m uvicorn server:app --host 0.0.0.0 --port 8000  
+
+# Load environment variables
+load_dotenv()
+
+# Configure Cloudinary
+cloudinary.config(
+  cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+  api_key=os.getenv("CLOUDINARY_API_KEY"),
+  api_secret=os.getenv("CLOUDINARY_API_SECRET")
+) 
 
 app = FastAPI()
 
-# Create dataset directory structure
+# Create dataset directory structure (optional fallback)
 DATASET_DIR = Path("dataset")
 DATASET_DIR.mkdir(exist_ok=True)
 
@@ -41,32 +55,62 @@ async def upload_dataset(
 ):
   """
   Endpoint for data gathering mode.
-  Saves images to organized folders: dataset/{fish_type}/{condition}/
+  Saves images to Cloudinary in two folder structures:
+  1. {fish_type}/{condition}/
+  2. date/{date}/{fish_type}/{condition}/
   """
   print(f"📸 Data Gathering: {fish_type} - {condition}")
   
-  # Create organized folder structure
-  save_dir = DATASET_DIR / fish_type / condition
-  save_dir.mkdir(parents=True, exist_ok=True)
-  
-  # Read and save the image
+  # Read the image
   contents = await file.read()
   
   # Generate unique filename with timestamp
-  from datetime import datetime
   timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-  filename = f"{fish_type}_{condition}_{timestamp}.jpg"
-  file_path = save_dir / filename
+  filename = f"{fish_type}_{condition}_{timestamp}"
   
-  # Save the file
-  with open(file_path, "wb") as f:
-    f.write(contents)
+  # Get current date for folder structure
+  date_folder = datetime.now().strftime("%Y-%m-%d")
   
-  print(f"✅ Saved to: {file_path}")
+  try:
+    # Upload 1: fish_type/condition/
+    folder_path_1 = f"daing-dataset/{fish_type}/{condition}"
+    upload_result_1 = cloudinary.uploader.upload(
+      contents,
+      folder=folder_path_1,
+      public_id=filename,
+      resource_type="image"
+    )
+    print(f"✅ Uploaded to Cloudinary: {folder_path_1}/{filename}")
+    
+    # Upload 2: date/YYYY-MM-DD/fish_type/condition/
+    folder_path_2 = f"daing-dataset/date/{date_folder}/{fish_type}/{condition}"
+    upload_result_2 = cloudinary.uploader.upload(
+      contents,
+      folder=folder_path_2,
+      public_id=filename,
+      resource_type="image"
+    )
+    print(f"✅ Uploaded to Cloudinary: {folder_path_2}/{filename}")
+    
+    return {
+      "status": "success",
+      "message": "Image uploaded to Cloudinary (2 locations)",
+      "filename": filename,
+      "uploads": [
+        {
+          "path": folder_path_1,
+          "url": upload_result_1.get("secure_url")
+        },
+        {
+          "path": folder_path_2,
+          "url": upload_result_2.get("secure_url")
+        }
+      ]
+    }
   
-  return {
-    "status": "success",
-    "message": f"Image saved to {save_dir}",
-    "filename": filename,
-    "path": str(file_path)
-  }
+  except Exception as e:
+    print(f"❌ Error uploading to Cloudinary: {str(e)}")
+    return {
+      "status": "error",
+      "message": f"Failed to upload to Cloudinary: {str(e)}"
+    }
