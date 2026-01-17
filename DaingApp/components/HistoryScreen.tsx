@@ -52,7 +52,11 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
     const map = new Map<string, HistoryEntry[]>();
     entries.forEach((entry) => {
       const date = new Date(entry.timestamp);
-      const key = date.toISOString().split("T")[0];
+      // Use local date components instead of ISO to avoid timezone issues
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      const key = `${year}-${month}-${day}`;
       if (!map.has(key)) {
         map.set(key, []);
       }
@@ -61,14 +65,17 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
 
     return Array.from(map.entries())
       .sort((a, b) => (a[0] > b[0] ? -1 : 1))
-      .map(([isoDate, list]) => ({
-        isoDate,
-        formattedDate: new Date(isoDate).toLocaleDateString(undefined, {
-          weekday: "short",
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        }),
+      .map(([dateKey, list]) => ({
+        isoDate: dateKey,
+        formattedDate: new Date(dateKey + "T00:00:00").toLocaleDateString(
+          undefined,
+          {
+            weekday: "short",
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+          }
+        ),
         rows: chunkEntries(list, 3),
       }));
   }, [entries, chunkEntries]);
