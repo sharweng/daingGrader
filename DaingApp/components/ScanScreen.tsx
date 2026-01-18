@@ -16,10 +16,12 @@ interface ScanScreenProps {
   capturedImage: string | null;
   resultImage: string | null;
   loading: boolean;
+  latestHistoryImage: string | null;
   onNavigate: (screen: Screen) => void;
   onTakePicture: () => void;
   onAnalyze: () => void;
   onReset: () => void;
+  onViewHistoryImage: () => void;
 }
 
 export const ScanScreen: React.FC<ScanScreenProps> = ({
@@ -27,10 +29,12 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
   capturedImage,
   resultImage,
   loading,
+  latestHistoryImage,
   onNavigate,
   onTakePicture,
   onAnalyze,
   onReset,
+  onViewHistoryImage,
 }) => {
   return (
     <View style={commonStyles.container}>
@@ -134,6 +138,27 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
         <View style={commonStyles.cameraWrapper}>
           <CameraView style={commonStyles.camera} ref={cameraRef} />
           <View style={commonStyles.buttonContainer}>
+            {latestHistoryImage && (
+              <TouchableOpacity
+                onPress={onViewHistoryImage}
+                style={{
+                  position: "absolute",
+                  left: 60,
+                  width: 60,
+                  height: 60,
+                  borderRadius: 8,
+                  overflow: "hidden",
+                  borderWidth: 2,
+                  borderColor: "white",
+                }}
+              >
+                <Image
+                  source={{ uri: latestHistoryImage }}
+                  style={{ width: "100%", height: "100%" }}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={commonStyles.captureButton}
               onPress={onTakePicture}

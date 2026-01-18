@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { View, Button, Alert } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { commonStyles } from "../styles/common";
@@ -10,9 +10,9 @@ import { HistoryScreen } from "../components/HistoryScreen";
 import { DatasetScreen } from "../components/DatasetScreen";
 import { SettingsModal } from "../components/SettingsModal";
 import { takePicture } from "../utils/camera";
-import { analyzeFish, uploadDataset } from "../services/api";
+import { analyzeFish, uploadDataset, fetchHistory } from "../services/api";
 import { DEFAULT_SERVER_BASE_URL, getServerUrls } from "../constants/config";
-import type { Screen, FishType, Condition } from "../types";
+import type { Screen, FishType, Condition, HistoryEntry } from "../types";
 
 export default function Index() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -28,12 +28,30 @@ export default function Index() {
   const [serverBaseUrl, setServerBaseUrl] = useState(DEFAULT_SERVER_BASE_URL);
   const serverUrls = useMemo(
     () => getServerUrls(serverBaseUrl),
-    [serverBaseUrl]
+    [serverBaseUrl],
   );
 
   // Data Gathering Mode
   const [fishType, setFishType] = useState<FishType>("danggit");
   const [condition, setCondition] = useState<Condition>("local_quality");
+  const [latestHistoryEntry, setLatestHistoryEntry] =
+    useState<HistoryEntry | null>(null);
+  const [viewingFromScan, setViewingFromScan] = useState(false);
+
+  // Fetch latest history entry for thumbnail
+  useEffect(() => {
+    const loadLatestHistory = async () => {
+      try {
+        const entries = await fetchHistory(serverUrls.history);
+        if (entries.length > 0) {
+          setLatestHistoryEntry(entries[0]);
+        }
+      } catch (error) {
+        // Silently fail - thumbnail is optional
+      }
+    };
+    loadLatestHistory();
+  }, [serverUrls.history, resultImage]); // Refresh when new analysis is done
 
   // Check camera permissions
   if (!permission) return <View />;
@@ -67,7 +85,7 @@ export default function Index() {
       console.error("Server Error:", error);
       Alert.alert(
         "Connection Failed",
-        `Make sure your server URL is correct.\nCurrent Target: ${serverBaseUrl}`
+        `Make sure your server URL is correct.\nCurrent Target: ${serverBaseUrl}`,
       );
     } finally {
       setLoading(false);
@@ -83,20 +101,20 @@ export default function Index() {
         capturedImage,
         fishType,
         condition,
-        serverUrls.uploadDataset
+        serverUrls.uploadDataset,
       );
 
       if (result.success) {
         Alert.alert(
           "Success",
-          `${result.message}\n\nSaved to: ${fishType}/${condition}/`
+          `${result.message}\n\nSaved to: ${fishType}/${condition}/`,
         );
         handleReset();
       } else {
         Alert.alert(
           "Upload Failed",
           result.error ||
-            "Unknown error occurred. Image was NOT saved to Cloudinary."
+            "Unknown error occurred. Image was NOT saved to Cloudinary.",
         );
         setLoading(false);
       }
@@ -104,7 +122,7 @@ export default function Index() {
       console.error("Upload Error:", error);
       Alert.alert(
         "Upload Failed",
-        "Network error. Check your server connection. Image was NOT saved."
+        "Network error. Check your server connection. Image was NOT saved.",
       );
       setLoading(false);
     }
@@ -114,6 +132,11 @@ export default function Index() {
     setCapturedImage(null);
     setResultImage(null);
     setLoading(false);
+  };
+
+  const handleViewHistoryImage = () => {
+    setViewingFromScan(true);
+    setCurrentScreen("history");
   };
 
   // ============================================
@@ -147,8 +170,12 @@ export default function Index() {
   if (currentScreen === "history") {
     return (
       <HistoryScreen
-        onNavigate={setCurrentScreen}
+        onNavigate={(screen) => {
+          setViewingFromScan(false);
+          setCurrentScreen(screen);
+        }}
         historyUrl={serverUrls.history}
+        initialEntry={viewingFromScan ? latestHistoryEntry : null}
       />
     );
   }
@@ -182,10 +209,12 @@ export default function Index() {
       capturedImage={capturedImage}
       resultImage={resultImage}
       loading={loading}
+      latestHistoryImage={latestHistoryEntry?.url || null}
       onNavigate={setCurrentScreen}
       onTakePicture={handleTakePicture}
       onAnalyze={handleAnalyzeFish}
       onReset={handleReset}
+      onViewHistoryImage={handleViewHistoryImage}
     />
   );
 }

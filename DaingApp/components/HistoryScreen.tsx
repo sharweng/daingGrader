@@ -26,15 +26,19 @@ import { fetchHistory, deleteHistoryEntry } from "../services/api";
 interface HistoryScreenProps {
   onNavigate: (screen: Screen) => void;
   historyUrl: string;
+  initialEntry?: HistoryEntry | null;
 }
 
 export const HistoryScreen: React.FC<HistoryScreenProps> = ({
   onNavigate,
   historyUrl,
+  initialEntry = null,
 }) => {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedEntry, setSelectedEntry] = useState<HistoryEntry | null>(null);
+  const [selectedEntry, setSelectedEntry] = useState<HistoryEntry | null>(
+    initialEntry,
+  );
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -264,7 +268,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
-          initialScrollIndex={currentIndex}
+          initialScrollIndex={currentIndex >= 0 ? currentIndex : undefined}
           getItemLayout={(_, index) => ({
             length: screenWidth,
             offset: screenWidth * index,
