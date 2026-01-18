@@ -9,6 +9,8 @@ import {
   Alert,
   ScrollView,
   Dimensions,
+  PanResponder,
+  Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { commonStyles } from "../styles/common";
@@ -29,6 +31,9 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
   const [loading, setLoading] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<HistoryEntry | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [swipeX] = useState(new Animated.Value(0));
 
   const photoSize = useMemo(() => {
     const screenWidth = Dimensions.get("window").width;
@@ -45,7 +50,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
       }
       return chunks;
     },
-    []
+    [],
   );
 
   const sections = useMemo(() => {
@@ -74,7 +79,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
             month: "long",
             day: "numeric",
             year: "numeric",
-          }
+          },
         ),
         rows: chunkEntries(list, 3),
       }));
@@ -88,7 +93,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
     } catch (error) {
       Alert.alert(
         "History",
-        "Unable to load history from the server. Please try again."
+        "Unable to load history from the server. Please try again.",
       );
     } finally {
       setLoading(false);
@@ -110,13 +115,13 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
       } catch (error) {
         Alert.alert(
           "Delete Failed",
-          "We couldn't delete this photo. Please try again."
+          "We couldn't delete this photo. Please try again.",
         );
       } finally {
         setIsDeleting(false);
       }
     },
-    [historyUrl, isDeleting]
+    [historyUrl, isDeleting],
   );
 
   const confirmDelete = useCallback(
@@ -130,7 +135,136 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
         },
       ]);
     },
-    [handleDeleteEntry]
+    [handleDeleteEntry],
+  );
+
+  const handleLongPress = useCallback((entry: HistoryEntry) => {
+    setIsSelectionMode(true);
+    setSelectedIds(new Set([entry.id]));
+  }, []);
+
+  const handleImagePress = useCallback(
+    (entry: HistoryEntry) => {
+      if (isSelectionMode) {
+        setSelectedIds((prev) => {
+          const newSet = new Set(prev);
+          if (newSet.has(entry.id)) {
+            newSet.delete(entry.id);
+          } else {
+            newSet.add(entry.id);
+          }
+          // Exit selection mode if no items selected
+          if (newSet.size === 0) {
+            setIsSelectionMode(false);
+          }
+          return newSet;
+        });
+      } else {
+        setSelectedEntry(entry);
+      }
+    },
+    [isSelectionMode],
+  );
+
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+
+    Alert.alert(
+      "Delete Photos",
+      `Remove ${selectedIds.size} photo${selectedIds.size > 1 ? "s" : ""} from history?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              const deletePromises = Array.from(selectedIds).map((id) =>
+                deleteHistoryEntry(historyUrl, id),
+              );
+              await Promise.all(deletePromises);
+              setEntries((prev) =>
+                prev.filter((item) => !selectedIds.has(item.id)),
+              );
+              setSelectedIds(new Set());
+              setIsSelectionMode(false);
+            } catch (error) {
+              Alert.alert(
+                "Delete Failed",
+                "We couldn't delete some photos. Please try again.",
+              );
+            } finally {
+              setIsDeleting(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [selectedIds, historyUrl]);
+
+  const cancelSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setIsSelectionMode(false);
+  }, []);
+
+  const getCurrentIndex = useCallback(() => {
+    if (!selectedEntry) return -1;
+    return entries.findIndex((e) => e.id === selectedEntry.id);
+  }, [selectedEntry, entries]);
+
+  const navigateToImage = useCallback(
+    (direction: "next" | "prev") => {
+      const currentIndex = getCurrentIndex();
+      if (currentIndex === -1) return;
+
+      let newIndex = currentIndex;
+      if (direction === "next" && currentIndex < entries.length - 1) {
+        newIndex = currentIndex + 1;
+      } else if (direction === "prev" && currentIndex > 0) {
+        newIndex = currentIndex - 1;
+      }
+
+      if (newIndex !== currentIndex) {
+        setSelectedEntry(entries[newIndex]);
+        swipeX.setValue(0);
+      }
+    },
+    [getCurrentIndex, entries, swipeX],
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_, gestureState) => {
+          return Math.abs(gestureState.dx) > 10;
+        },
+        onPanResponderMove: (_, gestureState) => {
+          swipeX.setValue(gestureState.dx);
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          const { dx, vx } = gestureState;
+          const screenWidth = Dimensions.get("window").width;
+
+          // Swipe threshold: either 1/3 of screen or fast swipe
+          if (Math.abs(dx) > screenWidth / 3 || Math.abs(vx) > 0.5) {
+            if (dx > 0) {
+              // Swipe right - go to previous
+              navigateToImage("prev");
+            } else {
+              // Swipe left - go to next
+              navigateToImage("next");
+            }
+          }
+
+          Animated.spring(swipeX, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        },
+      }),
+    [swipeX, navigateToImage],
   );
 
   const showEmpty = !loading && entries.length === 0;
@@ -138,8 +272,11 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
   // If viewing a specific entry, show full-screen view instead of grid
   if (selectedEntry) {
     const formattedTimestamp = new Date(
-      selectedEntry.timestamp
+      selectedEntry.timestamp,
     ).toLocaleString();
+    const currentIndex = getCurrentIndex();
+    const hasPrev = currentIndex > 0;
+    const hasNext = currentIndex < entries.length - 1;
 
     return (
       <View style={commonStyles.container}>
@@ -153,12 +290,50 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
           </TouchableOpacity>
         </View>
 
-        <View style={commonStyles.previewContainer}>
+        <Animated.View
+          style={[
+            commonStyles.previewContainer,
+            {
+              transform: [{ translateX: swipeX }],
+            },
+          ]}
+          {...panResponder.panHandlers}
+        >
           <Image
             source={{ uri: selectedEntry.url }}
             style={commonStyles.previewImage}
           />
-        </View>
+          {hasPrev && (
+            <View
+              style={{
+                position: "absolute",
+                left: 20,
+                top: "50%",
+                transform: [{ translateY: -20 }],
+                backgroundColor: "rgba(0,0,0,0.5)",
+                borderRadius: 20,
+                padding: 8,
+              }}
+            >
+              <Ionicons name="chevron-back" size={24} color="white" />
+            </View>
+          )}
+          {hasNext && (
+            <View
+              style={{
+                position: "absolute",
+                right: 20,
+                top: "50%",
+                transform: [{ translateY: -20 }],
+                backgroundColor: "rgba(0,0,0,0.5)",
+                borderRadius: 20,
+                padding: 8,
+              }}
+            >
+              <Ionicons name="chevron-forward" size={24} color="white" />
+            </View>
+          )}
+        </Animated.View>
 
         <View style={commonStyles.bottomButtonBar}>
           <TouchableOpacity
@@ -182,11 +357,27 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
   return (
     <View style={commonStyles.container}>
       <View style={commonStyles.screenHeader}>
-        <TouchableOpacity onPress={() => onNavigate("home")}>
-          <Ionicons name="arrow-back" size={28} color="white" />
-        </TouchableOpacity>
-        <Text style={commonStyles.screenTitle}>History</Text>
-        <View style={{ width: 28 }} />
+        {isSelectionMode ? (
+          <>
+            <TouchableOpacity onPress={cancelSelection}>
+              <Ionicons name="close" size={28} color="white" />
+            </TouchableOpacity>
+            <Text style={commonStyles.screenTitle}>
+              {selectedIds.size} selected
+            </Text>
+            <TouchableOpacity onPress={handleBatchDelete} disabled={isDeleting}>
+              <Ionicons name="trash" size={24} color="#f87171" />
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity onPress={() => onNavigate("home")}>
+              <Ionicons name="arrow-back" size={28} color="white" />
+            </TouchableOpacity>
+            <Text style={commonStyles.screenTitle}>History</Text>
+            <View style={{ width: 28 }} />
+          </>
+        )}
       </View>
 
       <View style={historyStyles.contentWrapper}>
@@ -221,24 +412,54 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
                     key={`${section.isoDate}-row-${rowIndex}`}
                     style={historyStyles.gridRow}
                   >
-                    {row.map((entry, index) => (
-                      <TouchableOpacity
-                        key={entry.id}
-                        style={[
-                          historyStyles.square,
-                          { width: photoSize, height: photoSize },
-                        ]}
-                        onPress={() => setSelectedEntry(entry)}
-                        onLongPress={() => confirmDelete(entry)}
-                        delayLongPress={300}
-                        activeOpacity={0.8}
-                      >
-                        <Image
-                          source={{ uri: entry.url }}
-                          style={historyStyles.squareImage}
-                        />
-                      </TouchableOpacity>
-                    ))}
+                    {row.map((entry, index) => {
+                      const isSelected = selectedIds.has(entry.id);
+                      return (
+                        <TouchableOpacity
+                          key={entry.id}
+                          style={[
+                            historyStyles.square,
+                            { width: photoSize, height: photoSize },
+                          ]}
+                          onPress={() => handleImagePress(entry)}
+                          onLongPress={() => handleLongPress(entry)}
+                          delayLongPress={500}
+                          activeOpacity={0.8}
+                        >
+                          <Image
+                            source={{ uri: entry.url }}
+                            style={historyStyles.squareImage}
+                          />
+                          {isSelectionMode && (
+                            <View
+                              style={{
+                                position: "absolute",
+                                top: 8,
+                                right: 8,
+                                width: 24,
+                                height: 24,
+                                borderRadius: 12,
+                                backgroundColor: isSelected
+                                  ? "#3b82f6"
+                                  : "rgba(255,255,255,0.3)",
+                                borderWidth: 2,
+                                borderColor: "white",
+                                justifyContent: "center",
+                                alignItems: "center",
+                              }}
+                            >
+                              {isSelected && (
+                                <Ionicons
+                                  name="checkmark"
+                                  size={16}
+                                  color="white"
+                                />
+                              )}
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
                     {row.length < 3 &&
                       Array.from({ length: 3 - row.length }).map((_, idx) => (
                         <View
