@@ -9,6 +9,7 @@ from starlette.responses import StreamingResponse
 from datetime import datetime
 import cloudinary
 import cloudinary.uploader
+import cloudinary.api
 from dotenv import load_dotenv
 from ultralytics import YOLO  # <--- NEW IMPORT
 
@@ -90,6 +91,7 @@ async def analyze_fish(file: UploadFile = File(...)):
   if not success:
     raise ValueError("Failed to encode image")
 
+  # Convert to bytes - this creates the actual JPEG file data
   image_bytes = encoded_img.tobytes()
 
   # 5. UPLOAD TO CLOUDINARY & LOG HISTORY
@@ -100,8 +102,9 @@ async def analyze_fish(file: UploadFile = File(...)):
     history_id = f"scan_{now.strftime('%Y%m%d_%H%M%S_%f')}"
 
     # We upload the ANNOTATED image (with boxes) so you can see what the AI saw
+    # Use io.BytesIO to create a file-like object from the JPEG encoded data
     upload_result = cloudinary.uploader.upload(
-      image_bytes,
+      io.BytesIO(image_bytes),
       folder=history_folder,
       public_id=history_id,
       resource_type="image"
@@ -111,13 +114,13 @@ async def analyze_fish(file: UploadFile = File(...)):
       "id": history_id,
       "timestamp": now.isoformat(),
       "url": upload_result.get("secure_url"),
-      "folder": history_folder,
-      # Optional: Save what the AI detected in the text log too
-      "detections": results[0].tojson() 
+      "folder": history_folder
     })
     print(f"📚 History saved: {history_folder}/{history_id}")
   except Exception as history_error:
-    print(f"⚠️ Failed to upload history image: {history_error}")
+    print(f"⚠️ Failed to save history: {history_error}")
+    import traceback
+    traceback.print_exc()
 
   # Return the image with boxes drawn on it
   return StreamingResponse(io.BytesIO(image_bytes), media_type="image/jpeg")
@@ -164,13 +167,85 @@ async def upload_dataset(
 
 @app.get("/history")
 def get_history():
-  return {"status": "success", "entries": _read_history_entries()}
+  """Fetch history from Cloudinary directly - always in sync!"""
+  try:
+    # Get all resources from the daing-history folder
+    result = cloudinary.api.resources(
+      type="upload",
+      prefix="daing-history/",
+      max_results=500,
+      resource_type="image"
+    )
+    
+    entries = []
+    for resource in result.get("resources", []):
+      # Extract info from the resource
+      public_id = resource.get("public_id", "")
+      # public_id format: "daing-history/2026-01-30/scan_20260130_123456_789012"
+      parts = public_id.split("/")
+      if len(parts) >= 3:
+        folder = "/".join(parts[:2])  # "daing-history/2026-01-30"
+        scan_id = parts[2]  # "scan_20260130_123456_789012"
+        
+        # Parse timestamp from scan_id (scan_YYYYMMDD_HHMMSS_ffffff)
+        try:
+          timestamp_str = scan_id.replace("scan_", "")
+          # Format: 20260130_123456_789012
+          date_part = timestamp_str[:8]  # 20260130
+          time_part = timestamp_str[9:15]  # 123456
+          micro_part = timestamp_str[16:]  # 789012
+          iso_timestamp = f"{date_part[:4]}-{date_part[4:6]}-{date_part[6:8]}T{time_part[:2]}:{time_part[2:4]}:{time_part[4:6]}.{micro_part}"
+        except:
+          iso_timestamp = resource.get("created_at", "")
+        
+        entries.append({
+          "id": scan_id,
+          "timestamp": iso_timestamp,
+          "url": resource.get("secure_url"),
+          "folder": folder
+        })
+    
+    # Sort by timestamp descending (newest first)
+    entries.sort(key=lambda x: x["timestamp"], reverse=True)
+    
+    return {"status": "success", "entries": entries}
+  except Exception as e:
+    print(f"⚠️ Failed to fetch from Cloudinary: {e}")
+    # Fallback to JSON file if Cloudinary fails
+    return {"status": "success", "entries": _read_history_entries()}
 
 @app.delete("/history/{entry_id}")
 def delete_history(entry_id: str):
-  # ... (Keep your existing code here) ...
-  entry = remove_history_entry(entry_id)
-  if not entry: return {"status": "error"}
-  public_id = f"{entry.get('folder')}/{entry_id}" if entry.get("folder") else entry_id
-  cloudinary.uploader.destroy(public_id, resource_type="image")
-  return {"status": "success"}
+  """Delete from both Cloudinary and local JSON"""
+  try:
+    # Try to get folder info from JSON first
+    entry = remove_history_entry(entry_id)
+    
+    # If not in JSON, try to find it in Cloudinary by searching
+    if not entry:
+      # Search in Cloudinary for this scan ID
+      try:
+        result = cloudinary.api.resources(
+          type="upload",
+          prefix=f"daing-history/",
+          max_results=500,
+          resource_type="image"
+        )
+        for resource in result.get("resources", []):
+          public_id = resource.get("public_id", "")
+          if entry_id in public_id:
+            # Found it! Delete from Cloudinary
+            cloudinary.uploader.destroy(public_id, resource_type="image")
+            return {"status": "success"}
+      except Exception as search_error:
+        print(f"⚠️ Failed to search Cloudinary: {search_error}")
+      
+      return {"status": "error", "message": "Entry not found"}
+    
+    # Delete from Cloudinary using the folder info from JSON
+    public_id = f"{entry.get('folder')}/{entry_id}" if entry.get("folder") else entry_id
+    cloudinary.uploader.destroy(public_id, resource_type="image")
+    return {"status": "success"}
+  except Exception as e:
+    print(f"⚠️ Failed to delete: {e}")
+    return {"status": "error", "message": str(e)}
