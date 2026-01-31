@@ -281,18 +281,22 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
     return (
       <View style={commonStyles.container}>
         <View style={commonStyles.screenHeader}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.headerButton}
             onPress={() => setSelectedEntry(null)}
           >
             <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
           <Text style={commonStyles.screenTitle}>{formattedTimestamp}</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.headerButton}
             onPress={() => confirmDelete(selectedEntry)}
           >
-            <Ionicons name="trash-outline" size={22} color={theme.colors.error} />
+            <Ionicons
+              name="trash-outline"
+              size={22}
+              color={theme.colors.error}
+            />
           </TouchableOpacity>
         </View>
 
@@ -333,7 +337,11 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
             onPress={() => confirmDelete(selectedEntry)}
             disabled={isDeleting}
           >
-            <Ionicons name="trash-outline" size={20} color={theme.colors.text} />
+            <Ionicons
+              name="trash-outline"
+              size={20}
+              color={theme.colors.text}
+            />
             <Text style={commonStyles.bottomButtonText}>Delete</Text>
           </TouchableOpacity>
         </View>
@@ -362,23 +370,33 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
       <View style={commonStyles.screenHeader}>
         {isSelectionMode ? (
           <>
-            <TouchableOpacity style={styles.headerButton} onPress={cancelSelection}>
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={cancelSelection}
+            >
               <Ionicons name="close" size={24} color={theme.colors.text} />
             </TouchableOpacity>
             <Text style={commonStyles.screenTitle}>
               {selectedIds.size} selected
             </Text>
-            <TouchableOpacity 
-              style={styles.headerButton} 
-              onPress={handleBatchDelete} 
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={handleBatchDelete}
               disabled={isDeleting}
             >
-              <Ionicons name="trash-outline" size={22} color={theme.colors.error} />
+              <Ionicons
+                name="trash-outline"
+                size={22}
+                color={theme.colors.error}
+              />
             </TouchableOpacity>
           </>
         ) : (
           <>
-            <TouchableOpacity style={styles.headerButton} onPress={() => onNavigate("home")}>
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={() => onNavigate("home")}
+            >
               <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
             </TouchableOpacity>
             <Text style={commonStyles.screenTitle}>History</Text>
@@ -396,7 +414,11 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
         ) : showEmpty ? (
           <View style={historyStyles.emptyStateWrapper}>
             <View style={historyStyles.emptyIcon}>
-              <Ionicons name="time-outline" size={48} color={theme.colors.textMuted} />
+              <Ionicons
+                name="time-outline"
+                size={48}
+                color={theme.colors.textMuted}
+              />
             </View>
             <Text style={historyStyles.emptyTitle}>No scans yet</Text>
             <Text style={historyStyles.emptySubtitle}>
@@ -437,7 +459,8 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
                         }
                         style={[
                           historyStyles.selectAllButton,
-                          !allSelectedInSection && historyStyles.selectAllButtonInactive,
+                          !allSelectedInSection &&
+                            historyStyles.selectAllButtonInactive,
                         ]}
                         activeOpacity={0.7}
                       >
@@ -448,12 +471,17 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
                               : "ellipse-outline"
                           }
                           size={16}
-                          color={allSelectedInSection ? theme.colors.text : theme.colors.primary}
+                          color={
+                            allSelectedInSection
+                              ? theme.colors.text
+                              : theme.colors.primary
+                          }
                         />
                         <Text
                           style={[
                             historyStyles.selectAllText,
-                            !allSelectedInSection && historyStyles.selectAllTextInactive,
+                            !allSelectedInSection &&
+                              historyStyles.selectAllTextInactive,
                           ]}
                         >
                           {allSelectedInSection ? "Deselect" : "Select All"}
@@ -488,7 +516,8 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
                               <View
                                 style={[
                                   historyStyles.selectionCheckbox,
-                                  isSelected && historyStyles.selectionCheckboxActive,
+                                  isSelected &&
+                                    historyStyles.selectionCheckboxActive,
                                 ]}
                               >
                                 {isSelected && (

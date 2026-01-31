@@ -56,7 +56,7 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
           <Text style={commonStyles.screenTitle}>Analysis Complete</Text>
           <View style={{ width: 40 }} />
         </View>
-        
+
         <View style={styles.resultContainer}>
           <Image
             source={{ uri: resultImage }}
@@ -64,7 +64,7 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
             resizeMode="contain"
           />
         </View>
-        
+
         <View style={commonStyles.bottomButtonBar}>
           <TouchableOpacity
             style={[commonStyles.bottomButton, styles.primaryButton]}
@@ -90,14 +90,14 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
           <Text style={commonStyles.screenTitle}>Preview</Text>
           <View style={{ width: 40 }} />
         </View>
-        
+
         <View style={styles.previewWrapper}>
           <Image
             source={{ uri: capturedImage }}
             style={styles.previewImage}
             resizeMode="contain"
           />
-          
+
           {loading && (
             <View style={styles.analysisOverlay}>
               <View style={styles.analysisCard}>
@@ -110,7 +110,7 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
             </View>
           )}
         </View>
-        
+
         {!loading && (
           <View style={commonStyles.bottomButtonBar}>
             <TouchableOpacity
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  
+
   headerButtonTransparent: {
     width: 44,
     height: 44,
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  
+
   cameraHeader: {
     position: "absolute",
     top: 0,
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     zIndex: 10,
   },
-  
+
   cameraTitle: {
     fontSize: 18,
     fontWeight: "600",
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
-  
+
   cameraControls: {
     position: "absolute",
     bottom: 50,
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 40,
   },
-  
+
   captureButton: {
     width: 80,
     height: 80,
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  
+
   captureButtonInner: {
     width: 68,
     height: 68,
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     borderColor: theme.colors.background,
   },
-  
+
   historyThumbnail: {
     width: 56,
     height: 56,
@@ -287,12 +287,12 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: "rgba(255, 255, 255, 0.8)",
   },
-  
+
   thumbnailImage: {
     width: "100%",
     height: "100%",
   },
-  
+
   galleryButton: {
     width: 56,
     height: 56,
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
-  
+
   hintContainer: {
     position: "absolute",
     bottom: 150,
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: "center",
   },
-  
+
   hintText: {
     fontSize: 14,
     color: "rgba(255, 255, 255, 0.7)",
@@ -323,34 +323,34 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
   },
-  
+
   resultContainer: {
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  
+
   resultImage: {
     flex: 1,
     width: "100%",
   },
-  
+
   previewWrapper: {
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  
+
   previewImage: {
     flex: 1,
     width: "100%",
   },
-  
+
   analysisOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0, 0, 0, 0.7)",
     justifyContent: "center",
     alignItems: "center",
   },
-  
+
   analysisCard: {
     backgroundColor: theme.colors.backgroundLight,
     paddingHorizontal: 40,
@@ -360,26 +360,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  
+
   analysisText: {
     fontSize: 20,
     fontWeight: "600",
     color: theme.colors.text,
     marginTop: 16,
   },
-  
+
   analysisSubtext: {
     fontSize: 14,
     color: theme.colors.textSecondary,
     marginTop: 4,
   },
-  
+
   primaryButton: {
     backgroundColor: theme.colors.primary,
     flexDirection: "row",
     gap: 8,
   },
-  
+
   secondaryButton: {
     backgroundColor: theme.colors.backgroundLight,
     borderWidth: 1,
@@ -387,7 +387,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  
+
   successButton: {
     backgroundColor: theme.colors.success,
     flexDirection: "row",
