@@ -1,7 +1,43 @@
 import axios from "axios";
-import type { FishType, Condition, HistoryEntry } from "../types";
+import type {
+  FishType,
+  Condition,
+  HistoryEntry,
+  AnalyticsSummary,
+} from "../types";
 
 const normalizeUrl = (url: string) => url.trim().replace(/\/+$/, "");
+
+// Retry helper for network requests
+const withRetry = async <T>(
+  fn: () => Promise<T>,
+  retries: number = 3,
+  delay: number = 1000,
+): Promise<T> => {
+  let lastError: Error | null = null;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      // Only retry on network errors, not on server errors
+      if (
+        error.code === "ERR_NETWORK" ||
+        error.code === "ECONNABORTED" ||
+        error.message?.includes("Network Error") ||
+        error.message?.includes("timeout")
+      ) {
+        if (i < retries - 1) {
+          console.log(`Retry ${i + 1}/${retries} after ${delay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+      }
+      throw error;
+    }
+  }
+  throw lastError;
+};
 
 export const analyzeFish = async (
   imageUri: string,
@@ -16,11 +52,16 @@ export const analyzeFish = async (
   });
 
   try {
-    const response = await axios.post(serverUrl, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-      responseType: "blob",
-      timeout: 10000, // 10 seconds timeout
-    });
+    const response = await withRetry(
+      () =>
+        axios.post(serverUrl, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+          responseType: "blob",
+          timeout: 30000, // 30 seconds timeout (increased from 10)
+        }),
+      3, // 3 retries
+      1000, // 1 second delay between retries
+    );
 
     // Convert Blob to Viewable Image
     return new Promise((resolve, reject) => {
@@ -149,4 +190,29 @@ export const deleteHistoryEntry = async (
   await axios.delete(`${base}/${encodedId}`, {
     timeout: 10000, // 10 seconds timeout
   });
+};
+
+export const fetchAnalytics = async (
+  analyticsUrl: string,
+): Promise<AnalyticsSummary> => {
+  try {
+    const response = await axios.get<AnalyticsSummary>(
+      normalizeUrl(analyticsUrl),
+      {
+        timeout: 10000,
+      },
+    );
+    return response.data;
+  } catch (error: any) {
+    // Return empty analytics on error
+    return {
+      status: "error",
+      total_scans: 0,
+      daing_scans: 0,
+      non_daing_scans: 0,
+      fish_type_distribution: {},
+      average_confidence: {},
+      daily_scans: {},
+    };
+  }
 };

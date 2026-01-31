@@ -181,7 +181,12 @@ export default function Index() {
   }
 
   if (currentScreen === "analytics") {
-    return <AnalyticsScreen onNavigate={setCurrentScreen} />;
+    return (
+      <AnalyticsScreen
+        onNavigate={setCurrentScreen}
+        analyticsUrl={serverUrls.analytics}
+      />
+    );
   }
 
   if (currentScreen === "history") {

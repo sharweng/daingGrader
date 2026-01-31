@@ -1,5 +1,5 @@
 // Default server base URL (can be customized in settings)
-export const DEFAULT_SERVER_BASE_URL = "http://10.195.236.106:8000";
+export const DEFAULT_SERVER_BASE_URL = "http://192.168.1.109:8000";
 
 const normalizeBaseUrl = (baseUrl: string) =>
   baseUrl.trim().replace(/\/+$/, "");
@@ -11,6 +11,7 @@ export const getServerUrls = (baseUrl: string) => {
     analyze: `${normalized}/analyze`,
     uploadDataset: `${normalized}/upload-dataset`,
     history: `${normalized}/history`,
+    analytics: `${normalized}/analytics/summary`,
   } as const;
 };
 

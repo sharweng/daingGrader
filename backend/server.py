@@ -6,12 +6,13 @@ import os
 import json
 from pathlib import Path
 from starlette.responses import StreamingResponse
-from datetime import datetime
+from datetime import datetime, timedelta
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
 from dotenv import load_dotenv
-from ultralytics import YOLO  # <--- NEW IMPORT
+from ultralytics import YOLO
+from pymongo import MongoClient
 
 # Load environment variables
 load_dotenv()
@@ -21,7 +22,25 @@ cloudinary.config(
   cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
   api_key=os.getenv("CLOUDINARY_API_KEY"),
   api_secret=os.getenv("CLOUDINARY_API_SECRET")
-) 
+)
+
+# Configure MongoDB
+try:
+    mongo_client = MongoClient(os.getenv("MONGODB_URI"))
+    db = mongo_client[os.getenv("MONGODB_DB_NAME", "daing_grader")]
+    scans_collection = db.scans
+    history_collection = db.history
+    # Create indexes for faster queries
+    scans_collection.create_index([("timestamp", -1)])
+    scans_collection.create_index([("fish_type", 1)])
+    scans_collection.create_index([("scan_id", 1)])  # For deletion by scan_id
+    history_collection.create_index([("timestamp", -1)])
+    history_collection.create_index([("id", 1)], unique=True)
+    print("✅ MongoDB Connected Successfully!")
+except Exception as e:
+    print(f"❌ MongoDB Connection Error: {e}")
+    scans_collection = None
+    history_collection = None
 
 app = FastAPI()
 
@@ -37,37 +56,92 @@ except Exception as e:
     print("Did you forget to put best.pt in the folder?")
 # ----------------------------------
 
-# Dataset & History Setup
+# Dataset Setup
 DATASET_DIR = Path("dataset")
 DATASET_DIR.mkdir(exist_ok=True)
-HISTORY_FILE = Path("history_log.json")
 
-def _read_history_entries():
-  if not HISTORY_FILE.exists():
-    return []
-  try:
-    with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-      return json.load(f)
-  except json.JSONDecodeError:
-    return []
-
-def _write_history_entries(entries):
-  with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-    json.dump(entries, f, indent=2)
+# ============================================
+# HISTORY FUNCTIONS (MongoDB)
+# ============================================
 
 def add_history_entry(entry):
-  entries = _read_history_entries()
-  entries.insert(0, entry)
-  _write_history_entries(entries[:200])
+    """Add a history entry to MongoDB"""
+    if history_collection is None:
+        print("⚠️ MongoDB not connected, skipping history save")
+        return
+    try:
+        # Convert ISO string to datetime for proper sorting
+        entry_doc = {
+            "id": entry["id"],
+            "timestamp": datetime.fromisoformat(entry["timestamp"]),
+            "url": entry["url"],
+            "folder": entry.get("folder", "")
+        }
+        history_collection.insert_one(entry_doc)
+        print(f"📚 History saved to MongoDB: {entry['id']}")
+    except Exception as e:
+        print(f"⚠️ Failed to save history to MongoDB: {e}")
+
+def get_history_entries():
+    """Get all history entries from MongoDB, sorted by newest first"""
+    if history_collection is None:
+        return []
+    try:
+        entries = list(history_collection.find({}, {"_id": 0}).sort("timestamp", -1).limit(200))
+        # Convert datetime back to ISO string for JSON response
+        for entry in entries:
+            if isinstance(entry.get("timestamp"), datetime):
+                entry["timestamp"] = entry["timestamp"].isoformat()
+        return entries
+    except Exception as e:
+        print(f"⚠️ Failed to get history from MongoDB: {e}")
+        return []
 
 def remove_history_entry(entry_id: str):
-  entries = _read_history_entries()
-  filtered = [e for e in entries if e.get("id") != entry_id]
-  if len(filtered) == len(entries):
-    return None
-  _write_history_entries(filtered)
-  removed = next(e for e in entries if e.get("id") == entry_id)
-  return removed
+    """Remove a history entry from MongoDB"""
+    if history_collection is None:
+        return None
+    try:
+        result = history_collection.find_one_and_delete({"id": entry_id})
+        if result:
+            # Convert datetime to ISO string
+            if isinstance(result.get("timestamp"), datetime):
+                result["timestamp"] = result["timestamp"].isoformat()
+            return result
+        return None
+    except Exception as e:
+        print(f"⚠️ Failed to remove history from MongoDB: {e}")
+        return None
+
+# ============================================
+# ANALYTICS FUNCTIONS
+# ============================================
+
+def log_scan_analytics(fish_types: list, confidences: list, is_daing: bool, scan_id: str = None):
+    """Log scan analytics to MongoDB"""
+    if scans_collection is None:
+        print("⚠️ MongoDB not connected, skipping analytics")
+        return
+    
+    try:
+        scan_data = {
+            "timestamp": datetime.now(),
+            "is_daing": is_daing,
+            "detections": [],
+            "scan_id": scan_id  # Link analytics to history entry
+        }
+        
+        if is_daing and fish_types:
+            for fish_type, confidence in zip(fish_types, confidences):
+                scan_data["detections"].append({
+                    "fish_type": fish_type,
+                    "confidence": float(confidence)
+                })
+        
+        scans_collection.insert_one(scan_data)
+        print(f"📊 Analytics logged: {'Daing' if is_daing else 'No Daing'} (ID: {scan_id})")
+    except Exception as e:
+        print(f"⚠️ Failed to log analytics: {e}")
 
 @app.post("/analyze")
 async def analyze_fish(file: UploadFile = File(...)):
@@ -88,6 +162,11 @@ async def analyze_fish(file: UploadFile = File(...)):
   
   # Get the detection boxes from results
   boxes = results[0].boxes
+  
+  # Variables for analytics
+  detected_fish_types = []
+  detected_confidences = []
+  is_daing_detected = False
   
   # Filter detections based on confidence
   if boxes is not None and len(boxes) > 0:
@@ -121,11 +200,19 @@ async def analyze_fish(file: UploadFile = File(...)):
       cv2.putText(annotated_img, text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness + 2)
       cv2.putText(annotated_img, text, (text_x, text_y), font, font_scale, (255, 255, 255), thickness)
       
+      is_daing_detected = False
       print("⚠️ No high-confidence daing detected")
     else:
       # DAING DETECTED - Filter and draw only high-confidence boxes
       # Create a mask for high confidence detections
       indices = [i for i, conf in enumerate(confidences) if conf >= CONFIDENCE_THRESHOLD]
+      
+      # Collect analytics data
+      for idx in indices:
+          fish_type = model.names[int(boxes.cls[idx])]
+          confidence = float(boxes.conf[idx])
+          detected_fish_types.append(fish_type)
+          detected_confidences.append(confidence)
       
       # Filter the results to only include high-confidence detections
       filtered_boxes = boxes[indices]
@@ -133,6 +220,7 @@ async def analyze_fish(file: UploadFile = File(...)):
       
       # Draw boxes and labels for filtered detections
       annotated_img = results[0].plot()
+      is_daing_detected = True
       print(f"✅ Found {len(indices)} high-confidence daing detection(s)")
   else:
     # No detections at all
@@ -190,6 +278,10 @@ async def analyze_fish(file: UploadFile = File(...)):
       "folder": history_folder
     })
     print(f"📚 History saved: {history_folder}/{history_id}")
+    
+    # 6. LOG ANALYTICS TO MONGODB (with scan_id for reliable deletion)
+    log_scan_analytics(detected_fish_types, detected_confidences, is_daing_detected, scan_id=history_id)
+    
   except Exception as history_error:
     print(f"⚠️ Failed to save history: {history_error}")
     import traceback
@@ -284,17 +376,72 @@ def get_history():
     return {"status": "success", "entries": entries}
   except Exception as e:
     print(f"⚠️ Failed to fetch from Cloudinary: {e}")
-    # Fallback to JSON file if Cloudinary fails
-    return {"status": "success", "entries": _read_history_entries()}
+    # Fallback to MongoDB if Cloudinary fails
+    return {"status": "success", "entries": get_history_entries()}
+
+def delete_analytics_by_scan_id(scan_id: str):
+    """Delete analytics record by scan_id"""
+    if scans_collection is None:
+        return False
+    try:
+        # First try to delete by scan_id (new method)
+        result = scans_collection.delete_one({"scan_id": scan_id})
+        if result.deleted_count > 0:
+            print(f"📊 Deleted analytics record for {scan_id}")
+            return True
+        
+        # Fallback: try by timestamp parsing (for old records)
+        timestamp_str = scan_id.replace("scan_", "")
+        date_part = timestamp_str[:8]
+        time_part = timestamp_str[9:15]
+        
+        target_time = datetime.strptime(f"{date_part}{time_part}", "%Y%m%d%H%M%S")
+        start_time = target_time - timedelta(seconds=2)
+        end_time = target_time + timedelta(seconds=2)
+        
+        result = scans_collection.delete_one({
+            "timestamp": {"$gte": start_time, "$lte": end_time}
+        })
+        if result.deleted_count > 0:
+            print(f"📊 Deleted analytics record for {scan_id} (by timestamp)")
+            return True
+        
+        print(f"⚠️ No analytics record found for {scan_id}")
+        return False
+    except Exception as e:
+        print(f"⚠️ Failed to delete analytics: {e}")
+        return False
+
+def cleanup_empty_cloudinary_folder(folder_path: str):
+    """Delete empty folder from Cloudinary"""
+    try:
+        # Check if folder has any resources left
+        result = cloudinary.api.resources(
+            type="upload",
+            prefix=folder_path,
+            max_results=1,
+            resource_type="image"
+        )
+        if len(result.get("resources", [])) == 0:
+            # Folder is empty, delete it
+            cloudinary.api.delete_folder(folder_path)
+            print(f"🗑️ Deleted empty folder: {folder_path}")
+            return True
+    except Exception as e:
+        # Folder deletion may fail if it doesn't exist or not empty
+        print(f"⚠️ Could not delete folder {folder_path}: {e}")
+    return False
 
 @app.delete("/history/{entry_id}")
 def delete_history(entry_id: str):
-  """Delete from both Cloudinary and local JSON"""
+  """Delete from both Cloudinary and MongoDB"""
   try:
-    # Try to get folder info from JSON first
+    folder_to_check = None
+    
+    # Try to get folder info from MongoDB first
     entry = remove_history_entry(entry_id)
     
-    # If not in JSON, try to find it in Cloudinary by searching
+    # If not in MongoDB, try to find it in Cloudinary by searching
     if not entry:
       # Search in Cloudinary for this scan ID
       try:
@@ -307,18 +454,121 @@ def delete_history(entry_id: str):
         for resource in result.get("resources", []):
           public_id = resource.get("public_id", "")
           if entry_id in public_id:
+            # Extract folder path for cleanup
+            parts = public_id.rsplit("/", 1)
+            if len(parts) > 1:
+                folder_to_check = parts[0]
+            
             # Found it! Delete from Cloudinary
             cloudinary.uploader.destroy(public_id, resource_type="image")
+            
+            # Delete from MongoDB analytics by scan_id
+            delete_analytics_by_scan_id(entry_id)
+            
+            # Check and cleanup empty folder
+            if folder_to_check:
+                cleanup_empty_cloudinary_folder(folder_to_check)
+            
             return {"status": "success"}
       except Exception as search_error:
         print(f"⚠️ Failed to search Cloudinary: {search_error}")
       
       return {"status": "error", "message": "Entry not found"}
     
-    # Delete from Cloudinary using the folder info from JSON
-    public_id = f"{entry.get('folder')}/{entry_id}" if entry.get("folder") else entry_id
+    # Get folder for cleanup check
+    folder_to_check = entry.get("folder")
+    
+    # Delete from Cloudinary using the folder info from MongoDB
+    public_id = f"{folder_to_check}/{entry_id}" if folder_to_check else entry_id
     cloudinary.uploader.destroy(public_id, resource_type="image")
+    
+    # Delete from MongoDB analytics by scan_id
+    delete_analytics_by_scan_id(entry_id)
+    
+    # Check and cleanup empty folder
+    if folder_to_check:
+        cleanup_empty_cloudinary_folder(folder_to_check)
+    
     return {"status": "success"}
   except Exception as e:
     print(f"⚠️ Failed to delete: {e}")
     return {"status": "error", "message": str(e)}
+
+# ============================================
+# ANALYTICS ENDPOINTS
+# ============================================
+
+@app.get("/analytics/summary")
+async def get_analytics_summary():
+    """Get analytics summary from MongoDB"""
+    if scans_collection is None:
+        return {
+            "status": "error",
+            "message": "MongoDB not connected",
+            "total_scans": 0,
+            "daing_scans": 0,
+            "non_daing_scans": 0,
+            "fish_type_distribution": {},
+            "average_confidence": {},
+            "daily_scans": {}
+        }
+    
+    try:
+        # Total scans
+        total_scans = scans_collection.count_documents({})
+        daing_scans = scans_collection.count_documents({"is_daing": True})
+        non_daing_scans = total_scans - daing_scans
+        
+        # Fish type distribution (flatten detections array)
+        pipeline = [
+            {"$match": {"is_daing": True}},
+            {"$unwind": "$detections"},
+            {"$group": {"_id": "$detections.fish_type", "count": {"$sum": 1}}}
+        ]
+        fish_types = list(scans_collection.aggregate(pipeline))
+        fish_type_distribution = {item["_id"]: item["count"] for item in fish_types}
+        
+        # Average confidence by fish type
+        pipeline = [
+            {"$match": {"is_daing": True}},
+            {"$unwind": "$detections"},
+            {"$group": {"_id": "$detections.fish_type", "avg_conf": {"$avg": "$detections.confidence"}}}
+        ]
+        avg_conf = list(scans_collection.aggregate(pipeline))
+        average_confidence = {item["_id"]: round(item["avg_conf"], 4) for item in avg_conf}
+        
+        # Daily scans (last 7 days)
+        seven_days_ago = datetime.now() - timedelta(days=7)
+        pipeline = [
+            {"$match": {"timestamp": {"$gte": seven_days_ago}}},
+            {"$group": {
+                "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$timestamp"}},
+                "count": {"$sum": 1}
+            }},
+            {"$sort": {"_id": 1}}
+        ]
+        daily = list(scans_collection.aggregate(pipeline))
+        daily_scans = {item["_id"]: item["count"] for item in daily}
+        
+        return {
+            "status": "success",
+            "total_scans": total_scans,
+            "daing_scans": daing_scans,
+            "non_daing_scans": non_daing_scans,
+            "fish_type_distribution": fish_type_distribution,
+            "average_confidence": average_confidence,
+            "daily_scans": daily_scans
+        }
+    
+    except Exception as e:
+        print(f"❌ Analytics error: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "total_scans": 0,
+            "daing_scans": 0,
+            "non_daing_scans": 0,
+            "fish_type_distribution": {},
+            "average_confidence": {},
+            "daily_scans": {}
+        }

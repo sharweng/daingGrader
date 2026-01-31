@@ -217,6 +217,31 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
     setIsSelectionMode(false);
   }, []);
 
+  const handleSelectAllInDate = useCallback((dateEntries: HistoryEntry[]) => {
+    setSelectedIds((prev) => {
+      const newSet = new Set(prev);
+      const allSelected = dateEntries.every((entry) => newSet.has(entry.id));
+      
+      if (allSelected) {
+        // Deselect all in this date
+        dateEntries.forEach((entry) => newSet.delete(entry.id));
+      } else {
+        // Select all in this date
+        dateEntries.forEach((entry) => newSet.add(entry.id));
+      }
+      
+      // Exit selection mode if no items selected
+      if (newSet.size === 0) {
+        setIsSelectionMode(false);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const isAllSelectedInDate = useCallback((dateEntries: HistoryEntry[]) => {
+    return dateEntries.every((entry) => selectedIds.has(entry.id));
+  }, [selectedIds]);
+
   const getCurrentIndex = useCallback(() => {
     if (!selectedEntry) return -1;
     return entries.findIndex((e) => e.id === selectedEntry.id);
@@ -305,6 +330,26 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
 
   return (
     <View style={commonStyles.container}>
+      {/* Deletion Loading Overlay */}
+      {isDeleting && (
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+        }}>
+          <ActivityIndicator size="large" color="#3b82f6" />
+          <Text style={{ color: '#fff', marginTop: 16, fontSize: 16 }}>
+            Deleting {selectedIds.size > 0 ? `${selectedIds.size} photo${selectedIds.size > 1 ? 's' : ''}` : 'photo'}...
+          </Text>
+        </View>
+      )}
+
       <View style={commonStyles.screenHeader}>
         {isSelectionMode ? (
           <>
@@ -331,11 +376,10 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
 
       <View style={historyStyles.contentWrapper}>
         {loading && entries.length === 0 ? (
-          <ActivityIndicator
-            size="large"
-            color="#3b82f6"
-            style={{ marginTop: 40 }}
-          />
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <ActivityIndicator size="large" color="#3b82f6" />
+            <Text style={{ color: '#888', marginTop: 16, fontSize: 16 }}>Loading History...</Text>
+          </View>
         ) : showEmpty ? (
           <View style={historyStyles.emptyStateWrapper}>
             <Ionicons name="time-outline" size={72} color="#334155" />
@@ -343,6 +387,24 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
             <Text style={historyStyles.emptySubtitle}>
               Scan fish to see your previous analyses here.
             </Text>
+            <TouchableOpacity
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundColor: "#3b82f6",
+                paddingHorizontal: 20,
+                paddingVertical: 12,
+                borderRadius: 8,
+                marginTop: 24,
+                gap: 8,
+              }}
+              onPress={loadHistory}
+            >
+              <Ionicons name="refresh" size={20} color="#fff" />
+              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
+                Refresh
+              </Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <ScrollView
@@ -351,11 +413,41 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
             }
             contentContainerStyle={historyStyles.scrollContent}
           >
-            {sections.map((section) => (
+            {sections.map((section) => {
+              // Get all entries for this date section
+              const allEntriesInSection = section.rows.flat();
+              const allSelectedInSection = isAllSelectedInDate(allEntriesInSection);
+              
+              return (
               <View key={section.isoDate} style={historyStyles.dateSection}>
-                <Text style={historyStyles.dateHeader}>
-                  {section.formattedDate}
-                </Text>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <Text style={historyStyles.dateHeader}>
+                    {section.formattedDate}
+                  </Text>
+                  {isSelectionMode && (
+                    <TouchableOpacity
+                      onPress={() => handleSelectAllInDate(allEntriesInSection)}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        backgroundColor: allSelectedInSection ? "#3b82f6" : "rgba(59, 130, 246, 0.2)",
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        borderRadius: 16,
+                        gap: 4,
+                      }}
+                    >
+                      <Ionicons
+                        name={allSelectedInSection ? "checkmark-circle" : "ellipse-outline"}
+                        size={16}
+                        color={allSelectedInSection ? "#fff" : "#3b82f6"}
+                      />
+                      <Text style={{ color: allSelectedInSection ? "#fff" : "#3b82f6", fontSize: 12, fontWeight: "600" }}>
+                        {allSelectedInSection ? "Deselect All" : "Select All"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
                 {section.rows.map((row, rowIndex) => (
                   <View
                     key={`${section.isoDate}-row-${rowIndex}`}
@@ -423,7 +515,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
                   </View>
                 ))}
               </View>
-            ))}
+            );})}
           </ScrollView>
         )}
       </View>
