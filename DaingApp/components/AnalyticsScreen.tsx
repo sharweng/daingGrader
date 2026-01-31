@@ -93,7 +93,10 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
     return (
       <View style={commonStyles.container}>
         <View style={commonStyles.screenHeader}>
-          <TouchableOpacity style={styles.headerButton} onPress={() => onNavigate("home")}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => onNavigate("home")}
+          >
             <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
           <Text style={commonStyles.screenTitle}>Analytics</Text>
@@ -111,7 +114,10 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
     return (
       <View style={commonStyles.container}>
         <View style={commonStyles.screenHeader}>
-          <TouchableOpacity style={styles.headerButton} onPress={() => onNavigate("home")}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => onNavigate("home")}
+          >
             <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
           <Text style={commonStyles.screenTitle}>Analytics</Text>
@@ -119,7 +125,11 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
         </View>
         <View style={styles.centerContent}>
           <View style={styles.emptyIcon}>
-            <Ionicons name="bar-chart-outline" size={48} color={theme.colors.textMuted} />
+            <Ionicons
+              name="bar-chart-outline"
+              size={48}
+              color={theme.colors.textMuted}
+            />
           </View>
           <Text style={styles.emptyText}>No Scan Data Yet</Text>
           <Text style={styles.emptySubtext}>
@@ -145,7 +155,10 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
   return (
     <View style={commonStyles.container}>
       <View style={commonStyles.screenHeader}>
-        <TouchableOpacity style={styles.headerButton} onPress={() => onNavigate("home")}>
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={() => onNavigate("home")}
+        >
           <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={commonStyles.screenTitle}>Analytics</Text>
@@ -163,17 +176,32 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
         {/* Summary Cards */}
         <View style={styles.summaryContainer}>
           <View style={[styles.summaryCard, styles.totalCard]}>
-            <Ionicons name="scan-outline" size={24} color="rgba(255,255,255,0.7)" style={styles.summaryIcon} />
+            <Ionicons
+              name="scan-outline"
+              size={24}
+              color="rgba(255,255,255,0.7)"
+              style={styles.summaryIcon}
+            />
             <Text style={styles.summaryNumber}>{analytics.total_scans}</Text>
             <Text style={styles.summaryLabel}>Total Scans</Text>
           </View>
           <View style={[styles.summaryCard, styles.successCard]}>
-            <Ionicons name="fish-outline" size={24} color="rgba(255,255,255,0.7)" style={styles.summaryIcon} />
+            <Ionicons
+              name="fish-outline"
+              size={24}
+              color="rgba(255,255,255,0.7)"
+              style={styles.summaryIcon}
+            />
             <Text style={styles.summaryNumber}>{analytics.daing_scans}</Text>
             <Text style={styles.summaryLabel}>Daing</Text>
           </View>
           <View style={[styles.summaryCard, styles.errorCard]}>
-            <Ionicons name="close-circle-outline" size={24} color="rgba(255,255,255,0.7)" style={styles.summaryIcon} />
+            <Ionicons
+              name="close-circle-outline"
+              size={24}
+              color="rgba(255,255,255,0.7)"
+              style={styles.summaryIcon}
+            />
             <Text style={styles.summaryNumber}>
               {analytics.non_daing_scans}
             </Text>
@@ -293,6 +321,116 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
             </View>
           </View>
         )}
+
+        {/* Color Consistency Analysis */}
+        {analytics.color_consistency &&
+          analytics.color_consistency.average_score > 0 && (
+            <View style={styles.chartContainer}>
+              <Text style={styles.chartTitle}>Color Consistency Analysis</Text>
+
+              {/* Average Score Display */}
+              <View style={styles.colorScoreContainer}>
+                <View style={styles.colorScoreCircle}>
+                  <Text style={styles.colorScoreValue}>
+                    {analytics.color_consistency.average_score.toFixed(0)}%
+                  </Text>
+                  <Text style={styles.colorScoreLabel}>Avg Score</Text>
+                </View>
+                <View style={styles.colorScoreInfo}>
+                  <Text style={styles.colorInfoText}>
+                    Higher scores indicate more uniform color distribution,
+                    which correlates with better processing quality.
+                  </Text>
+                </View>
+              </View>
+
+              {/* Quality Grade Distribution */}
+              <Text style={styles.chartSubtitle}>
+                Quality Grade Distribution
+              </Text>
+              <View style={styles.gradeContainer}>
+                {Object.entries(
+                  analytics.color_consistency.grade_distribution,
+                ).map(([grade, count]) => {
+                  const total = Object.values(
+                    analytics.color_consistency!.grade_distribution,
+                  ).reduce((a, b) => a + b, 0);
+                  const percentage = total > 0 ? (count / total) * 100 : 0;
+                  const gradeColor =
+                    grade === "Export"
+                      ? "#4CAF50"
+                      : grade === "Local"
+                        ? "#FFC107"
+                        : "#F44336";
+                  return (
+                    <View key={grade} style={styles.gradeRow}>
+                      <View style={styles.gradeLabelContainer}>
+                        <View
+                          style={[
+                            styles.gradeDot,
+                            { backgroundColor: gradeColor },
+                          ]}
+                        />
+                        <Text style={styles.gradeLabel}>{grade}</Text>
+                      </View>
+                      <View style={styles.gradeBarTrack}>
+                        <View
+                          style={[
+                            styles.gradeBarFill,
+                            {
+                              width: `${percentage}%`,
+                              backgroundColor: gradeColor,
+                            },
+                          ]}
+                        />
+                      </View>
+                      <Text style={styles.gradeValue}>
+                        {count} ({percentage.toFixed(0)}%)
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+
+              {/* Color Consistency by Fish Type */}
+              {Object.keys(analytics.color_consistency.by_fish_type).length >
+                0 && (
+                <>
+                  <Text style={styles.chartSubtitle}>By Fish Type</Text>
+                  <View style={styles.colorByTypeContainer}>
+                    {Object.entries(analytics.color_consistency.by_fish_type)
+                      .sort(([, a], [, b]) => b.avg_score - a.avg_score)
+                      .map(([fishType, data]) => (
+                        <View key={fishType} style={styles.colorTypeRow}>
+                          <Text style={styles.colorTypeLabel} numberOfLines={1}>
+                            {fishType}
+                          </Text>
+                          <View style={styles.colorTypeBarContainer}>
+                            <View
+                              style={[
+                                styles.colorTypeBar,
+                                {
+                                  width: `${data.avg_score}%`,
+                                  backgroundColor:
+                                    data.avg_score >= 75
+                                      ? "#4CAF50"
+                                      : data.avg_score >= 50
+                                        ? "#FFC107"
+                                        : "#F44336",
+                                },
+                              ]}
+                            />
+                          </View>
+                          <Text style={styles.colorTypeValue}>
+                            {data.avg_score.toFixed(0)}%
+                          </Text>
+                        </View>
+                      ))}
+                  </View>
+                </>
+              )}
+            </View>
+          )}
 
         {/* Daily Scans */}
         {Object.keys(analytics.daily_scans).length > 0 && (
@@ -561,5 +699,118 @@ const styles = StyleSheet.create({
     color: "#888",
     marginTop: 4,
     textAlign: "center",
+  },
+  // Color Consistency Styles
+  chartSubtitle: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: theme.colors.textSecondary,
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  colorScoreContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    marginBottom: 8,
+  },
+  colorScoreCircle: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: theme.colors.primary + "30",
+    borderWidth: 3,
+    borderColor: theme.colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  colorScoreValue: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: theme.colors.text,
+  },
+  colorScoreLabel: {
+    fontSize: 10,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
+  },
+  colorScoreInfo: {
+    flex: 1,
+  },
+  colorInfoText: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    lineHeight: 18,
+  },
+  gradeContainer: {
+    gap: 10,
+  },
+  gradeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  gradeLabelContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: 70,
+    gap: 6,
+  },
+  gradeDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  gradeLabel: {
+    fontSize: 12,
+    color: "#CCC",
+  },
+  gradeBarTrack: {
+    flex: 1,
+    height: 16,
+    backgroundColor: "#2A2A4A",
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  gradeBarFill: {
+    height: "100%",
+    borderRadius: 8,
+  },
+  gradeValue: {
+    width: 70,
+    fontSize: 12,
+    color: "#fff",
+    textAlign: "right",
+  },
+  colorByTypeContainer: {
+    gap: 10,
+  },
+  colorTypeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  colorTypeLabel: {
+    width: 100,
+    fontSize: 12,
+    color: "#CCC",
+  },
+  colorTypeBarContainer: {
+    flex: 1,
+    height: 18,
+    backgroundColor: "#2A2A4A",
+    borderRadius: 9,
+    overflow: "hidden",
+  },
+  colorTypeBar: {
+    height: "100%",
+    borderRadius: 9,
+  },
+  colorTypeValue: {
+    width: 40,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#fff",
+    textAlign: "right",
   },
 });

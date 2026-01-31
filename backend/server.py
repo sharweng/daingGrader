@@ -17,6 +17,423 @@ from pymongo import MongoClient
 # Load environment variables
 load_dotenv()
 
+# ============================================
+# COLOR CONSISTENCY ANALYSIS FUNCTIONS
+# ============================================
+
+def analyze_color_consistency_with_masks(img: np.ndarray, masks, boxes) -> dict:
+    """
+    Analyze color consistency using segmentation masks for accurate fish-only analysis.
+    
+    This measures the visual uniformity of the dried fish surface by calculating
+    standard deviations of pixel intensities. Only analyzes pixels within the mask.
+    
+    Returns:
+        - consistency_score: 0-100 (higher = more uniform = better quality)
+        - quality_grade: 'Export', 'Local', or 'Reject'
+        - color_stats: detailed statistics for each fish region
+    """
+    if masks is None or len(masks) == 0:
+        print("📦 No masks available, falling back to bounding box analysis")
+        return analyze_color_consistency_with_boxes(img, boxes)
+    
+    print("🎭 Using segmentation masks for accurate color analysis")
+    
+    color_stats = []
+    total_std = 0
+    h, w = img.shape[:2]
+    
+    for i, mask in enumerate(masks):
+        try:
+            # Get mask data and resize to image dimensions
+            mask_data = mask.data[0].cpu().numpy()
+            
+            # Resize mask to match image size if needed
+            if mask_data.shape != (h, w):
+                mask_resized = cv2.resize(mask_data.astype(np.float32), (w, h), interpolation=cv2.INTER_LINEAR)
+                mask_binary = (mask_resized > 0.5).astype(np.uint8)
+            else:
+                mask_binary = (mask_data > 0.5).astype(np.uint8)
+            
+            # Extract only the fish pixels using the mask
+            fish_pixels = img[mask_binary == 1]
+            
+            if fish_pixels.size == 0:
+                continue
+            
+            # Reshape to Nx3 for color analysis
+            fish_pixels = fish_pixels.reshape(-1, 3)
+            
+            # Convert to LAB color space for better color analysis
+            # Create a small image from fish pixels for conversion
+            fish_pixels_img = fish_pixels.reshape(1, -1, 3).astype(np.uint8)
+            lab_pixels = cv2.cvtColor(fish_pixels_img, cv2.COLOR_BGR2LAB).reshape(-1, 3)
+            
+            # Calculate statistics for each channel
+            l_channel = lab_pixels[:, 0]  # Lightness
+            a_channel = lab_pixels[:, 1]  # Green-Red
+            b_channel = lab_pixels[:, 2]  # Blue-Yellow
+            
+            # Standard deviations (lower = more uniform)
+            l_std = float(np.std(l_channel))
+            a_std = float(np.std(a_channel))
+            b_std = float(np.std(b_channel))
+            
+            # Mean values for color profile
+            l_mean = float(np.mean(l_channel))
+            a_mean = float(np.mean(a_channel))
+            b_mean = float(np.mean(b_channel))
+            
+            # Combined standard deviation (weighted)
+            combined_std = (l_std * 0.5) + (a_std * 0.25) + (b_std * 0.25)
+            total_std += combined_std
+            
+            # RGB standard deviations
+            rgb_std = [float(np.std(fish_pixels[:, c])) for c in range(3)]
+            
+            # Count pixels for coverage info
+            pixel_count = np.sum(mask_binary)
+            coverage_percent = (pixel_count / (h * w)) * 100
+            
+            color_stats.append({
+                "region_index": i,
+                "l_std": round(l_std, 2),
+                "a_std": round(a_std, 2),
+                "b_std": round(b_std, 2),
+                "l_mean": round(l_mean, 2),
+                "a_mean": round(a_mean, 2),
+                "b_mean": round(b_mean, 2),
+                "combined_std": round(combined_std, 2),
+                "rgb_std": [round(s, 2) for s in rgb_std],
+                "pixel_count": int(pixel_count),
+                "coverage_percent": round(coverage_percent, 2)
+            })
+            
+        except Exception as e:
+            print(f"⚠️ Error analyzing mask region {i}: {e}")
+            import traceback
+            traceback.print_exc()
+            continue
+    
+    if not color_stats:
+        return {
+            "consistency_score": 0,
+            "quality_grade": "Unknown",
+            "color_stats": [],
+            "avg_std_deviation": 0
+        }
+    
+    # Calculate average standard deviation across all fish
+    avg_std = total_std / len(color_stats)
+    
+    # Convert std deviation to consistency score (0-100)
+    consistency_score = min(100, max(0, 100 * np.exp(-avg_std / 35)))
+    
+    # Determine quality grade based on score
+    if consistency_score >= 75:
+        quality_grade = "Export"
+    elif consistency_score >= 50:
+        quality_grade = "Local"
+    else:
+        quality_grade = "Reject"
+    
+    return {
+        "consistency_score": round(consistency_score, 1),
+        "quality_grade": quality_grade,
+        "color_stats": color_stats,
+        "avg_std_deviation": round(avg_std, 2),
+        "analysis_method": "segmentation"
+    }
+
+
+def analyze_color_consistency_with_boxes(img: np.ndarray, boxes) -> dict:
+    """
+    Fallback: Analyze color consistency using bounding boxes (less accurate).
+    Used when segmentation masks are not available.
+    """
+    if boxes is None or len(boxes) == 0:
+        return {
+            "consistency_score": 0,
+            "quality_grade": "Unknown",
+            "color_stats": [],
+            "avg_std_deviation": 0
+        }
+    
+    print("📦 Using bounding box for color analysis (detection model)")
+    
+    color_stats = []
+    total_std = 0
+    
+    for i, box in enumerate(boxes):
+        try:
+            # Get bounding box coordinates
+            x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
+            
+            # Ensure coordinates are within image bounds
+            h, w = img.shape[:2]
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(w, x2), min(h, y2)
+            
+            # Extract fish region (center 70% to reduce background)
+            box_w, box_h = x2 - x1, y2 - y1
+            margin_x, margin_y = int(box_w * 0.15), int(box_h * 0.15)
+            x1, y1 = x1 + margin_x, y1 + margin_y
+            x2, y2 = x2 - margin_x, y2 - margin_y
+            
+            fish_region = img[y1:y2, x1:x2]
+            
+            if fish_region.size == 0:
+                continue
+            
+            # Convert to LAB color space
+            lab_region = cv2.cvtColor(fish_region, cv2.COLOR_BGR2LAB)
+            
+            l_channel = lab_region[:, :, 0]
+            a_channel = lab_region[:, :, 1]
+            b_channel = lab_region[:, :, 2]
+            
+            l_std = float(np.std(l_channel))
+            a_std = float(np.std(a_channel))
+            b_std = float(np.std(b_channel))
+            
+            l_mean = float(np.mean(l_channel))
+            a_mean = float(np.mean(a_channel))
+            b_mean = float(np.mean(b_channel))
+            
+            combined_std = (l_std * 0.5) + (a_std * 0.25) + (b_std * 0.25)
+            total_std += combined_std
+            
+            rgb_std = [float(np.std(fish_region[:, :, c])) for c in range(3)]
+            
+            color_stats.append({
+                "region_index": i,
+                "l_std": round(l_std, 2),
+                "a_std": round(a_std, 2),
+                "b_std": round(b_std, 2),
+                "l_mean": round(l_mean, 2),
+                "a_mean": round(a_mean, 2),
+                "b_mean": round(b_mean, 2),
+                "combined_std": round(combined_std, 2),
+                "rgb_std": [round(s, 2) for s in rgb_std]
+            })
+            
+        except Exception as e:
+            print(f"⚠️ Error analyzing box region {i}: {e}")
+            continue
+    
+    if not color_stats:
+        return {
+            "consistency_score": 0,
+            "quality_grade": "Unknown",
+            "color_stats": [],
+            "avg_std_deviation": 0
+        }
+    
+    avg_std = total_std / len(color_stats)
+    consistency_score = min(100, max(0, 100 * np.exp(-avg_std / 35)))
+    
+    if consistency_score >= 75:
+        quality_grade = "Export"
+    elif consistency_score >= 50:
+        quality_grade = "Local"
+    else:
+        quality_grade = "Reject"
+    
+    return {
+        "consistency_score": round(consistency_score, 1),
+        "quality_grade": quality_grade,
+        "color_stats": color_stats,
+        "avg_std_deviation": round(avg_std, 2),
+        "analysis_method": "bounding_box"
+    }
+
+
+def draw_segmentation_results(img: np.ndarray, results, indices: list, model) -> np.ndarray:
+    """
+    Draw segmentation masks and labels on the image.
+    Creates a semi-transparent colored overlay for each fish.
+    """
+    annotated_img = img.copy()
+    h, w = img.shape[:2]
+    
+    masks = results[0].masks
+    boxes = results[0].boxes
+    
+    # Colors for different fish (BGR format)
+    colors = [
+        (255, 107, 107),  # Red
+        (78, 205, 196),   # Teal
+        (69, 183, 209),   # Blue
+        (150, 206, 180),  # Green
+        (255, 234, 167),  # Yellow
+        (221, 160, 221),  # Plum
+    ]
+    
+    for i, idx in enumerate(indices):
+        color = colors[i % len(colors)]
+        
+        if masks is not None and idx < len(masks):
+            # Get mask and resize to image dimensions
+            mask_data = masks[idx].data[0].cpu().numpy()
+            if mask_data.shape != (h, w):
+                mask_resized = cv2.resize(mask_data.astype(np.float32), (w, h), interpolation=cv2.INTER_LINEAR)
+                mask_binary = (mask_resized > 0.5).astype(np.uint8)
+            else:
+                mask_binary = (mask_data > 0.5).astype(np.uint8)
+            
+            # Create colored overlay
+            colored_mask = np.zeros_like(annotated_img)
+            colored_mask[mask_binary == 1] = color
+            
+            # Blend with original image (semi-transparent)
+            annotated_img = cv2.addWeighted(annotated_img, 1, colored_mask, 0.4, 0)
+            
+            # Draw polygon outline
+            contours, _ = cv2.findContours(mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            cv2.drawContours(annotated_img, contours, -1, color, 2)
+        
+        # Draw label with fish type and confidence
+        if boxes is not None and idx < len(boxes):
+            box = boxes[idx]
+            x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
+            fish_type = model.names[int(box.cls[0])]
+            confidence = float(box.conf[0])
+            
+            # Label background
+            label = f"{fish_type} {confidence:.0%}"
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.6
+            thickness = 2
+            (label_w, label_h), _ = cv2.getTextSize(label, font, font_scale, thickness)
+            
+            # Draw label background
+            cv2.rectangle(annotated_img, (x1, y1 - label_h - 10), (x1 + label_w + 10, y1), color, -1)
+            cv2.putText(annotated_img, label, (x1 + 5, y1 - 5), font, font_scale, (255, 255, 255), thickness)
+    
+    return annotated_img
+
+
+def draw_color_analysis_image(img: np.ndarray, results, indices: list, model, color_analysis: dict) -> np.ndarray:
+    """
+    Draw segmentation masks with color consistency score overlay.
+    This creates the second slide showing the polygon analysis.
+    """
+    annotated_img = img.copy()
+    h, w = img.shape[:2]
+    
+    masks = results[0].masks
+    boxes = results[0].boxes
+    
+    # Draw masks with color based on quality grade
+    grade = color_analysis.get("quality_grade", "Unknown")
+    score = color_analysis.get("consistency_score", 0)
+    
+    # Color based on grade
+    if grade == "Export":
+        mask_color = (80, 200, 120)  # Green
+        grade_color = (80, 200, 120)
+    elif grade == "Local":
+        mask_color = (80, 180, 255)  # Orange/Yellow
+        grade_color = (80, 180, 255)
+    else:
+        mask_color = (80, 80, 255)  # Red
+        grade_color = (80, 80, 255)
+    
+    for i, idx in enumerate(indices):
+        if masks is not None and idx < len(masks):
+            # Get mask and resize to image dimensions
+            mask_data = masks[idx].data[0].cpu().numpy()
+            if mask_data.shape != (h, w):
+                mask_resized = cv2.resize(mask_data.astype(np.float32), (w, h), interpolation=cv2.INTER_LINEAR)
+                mask_binary = (mask_resized > 0.5).astype(np.uint8)
+            else:
+                mask_binary = (mask_data > 0.5).astype(np.uint8)
+            
+            # Create colored overlay
+            colored_mask = np.zeros_like(annotated_img)
+            colored_mask[mask_binary == 1] = mask_color
+            
+            # Blend with original image (semi-transparent)
+            annotated_img = cv2.addWeighted(annotated_img, 1, colored_mask, 0.5, 0)
+            
+            # Draw polygon outline (thicker)
+            contours, _ = cv2.findContours(mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            cv2.drawContours(annotated_img, contours, -1, mask_color, 3)
+    
+    # Draw color consistency score overlay at the bottom
+    overlay_height = 120
+    overlay = annotated_img.copy()
+    cv2.rectangle(overlay, (0, h - overlay_height), (w, h), (0, 0, 0), -1)
+    annotated_img = cv2.addWeighted(overlay, 0.7, annotated_img, 0.3, 0)
+    
+    # Draw score text
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    
+    # Main score
+    score_text = f"Color Consistency: {score:.1f}%"
+    font_scale = 0.9
+    thickness = 2
+    (text_w, text_h), _ = cv2.getTextSize(score_text, font, font_scale, thickness)
+    text_x = (w - text_w) // 2
+    text_y = h - overlay_height + 45
+    cv2.putText(annotated_img, score_text, (text_x, text_y), font, font_scale, (255, 255, 255), thickness)
+    
+    # Grade badge
+    grade_text = f"Grade: {grade}"
+    font_scale_grade = 1.1
+    thickness_grade = 3
+    (grade_w, grade_h), _ = cv2.getTextSize(grade_text, font, font_scale_grade, thickness_grade)
+    grade_x = (w - grade_w) // 2
+    grade_y = h - overlay_height + 90
+    
+    # Draw grade with color
+    cv2.putText(annotated_img, grade_text, (grade_x, grade_y), font, font_scale_grade, grade_color, thickness_grade)
+    
+    return annotated_img
+
+
+def draw_detection_boxes(img: np.ndarray, results, indices: list, model) -> np.ndarray:
+    """
+    Draw bounding boxes for detection display (first slide).
+    """
+    annotated_img = img.copy()
+    boxes = results[0].boxes
+    
+    # Colors for different fish (BGR format)
+    colors = [
+        (255, 107, 107),  # Red
+        (78, 205, 196),   # Teal
+        (69, 183, 209),   # Blue
+        (150, 206, 180),  # Green
+        (255, 234, 167),  # Yellow
+        (221, 160, 221),  # Plum
+    ]
+    
+    for i, idx in enumerate(indices):
+        color = colors[i % len(colors)]
+        
+        if boxes is not None and idx < len(boxes):
+            box = boxes[idx]
+            x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
+            fish_type = model.names[int(box.cls[0])]
+            confidence = float(box.conf[0])
+            
+            # Draw bounding box
+            cv2.rectangle(annotated_img, (x1, y1), (x2, y2), color, 3)
+            
+            # Label background
+            label = f"{fish_type} {confidence:.0%}"
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.7
+            thickness = 2
+            (label_w, label_h), _ = cv2.getTextSize(label, font, font_scale, thickness)
+            
+            # Draw label background
+            cv2.rectangle(annotated_img, (x1, y1 - label_h - 14), (x1 + label_w + 10, y1), color, -1)
+            cv2.putText(annotated_img, label, (x1 + 5, y1 - 7), font, font_scale, (255, 255, 255), thickness)
+    
+    return annotated_img
+
 # Configure Cloudinary
 cloudinary.config(
   cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
@@ -117,8 +534,8 @@ def remove_history_entry(entry_id: str):
 # ANALYTICS FUNCTIONS
 # ============================================
 
-def log_scan_analytics(fish_types: list, confidences: list, is_daing: bool, scan_id: str = None):
-    """Log scan analytics to MongoDB"""
+def log_scan_analytics(fish_types: list, confidences: list, is_daing: bool, scan_id: str = None, color_analysis: dict = None):
+    """Log scan analytics to MongoDB including color consistency data"""
     if scans_collection is None:
         print("⚠️ MongoDB not connected, skipping analytics")
         return
@@ -128,7 +545,8 @@ def log_scan_analytics(fish_types: list, confidences: list, is_daing: bool, scan
             "timestamp": datetime.now(),
             "is_daing": is_daing,
             "detections": [],
-            "scan_id": scan_id  # Link analytics to history entry
+            "scan_id": scan_id,  # Link analytics to history entry
+            "color_analysis": color_analysis or {}  # Color consistency data
         }
         
         if is_daing and fish_types:
@@ -139,7 +557,9 @@ def log_scan_analytics(fish_types: list, confidences: list, is_daing: bool, scan
                 })
         
         scans_collection.insert_one(scan_data)
-        print(f"📊 Analytics logged: {'Daing' if is_daing else 'No Daing'} (ID: {scan_id})")
+        grade = color_analysis.get('quality_grade', 'N/A') if color_analysis else 'N/A'
+        score = color_analysis.get('consistency_score', 0) if color_analysis else 0
+        print(f"📊 Analytics logged: {'Daing' if is_daing else 'No Daing'} | Color: {score}% ({grade}) (ID: {scan_id})")
     except Exception as e:
         print(f"⚠️ Failed to log analytics: {e}")
 
@@ -152,87 +572,115 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
   nparr = np.frombuffer(contents, np.uint8)
   img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-  # 2. RUN AI INFERENCE (The Real Deal)
-  # This replaces the manual cv2.rectangle code
+  # 2. RUN AI INFERENCE (Segmentation Model)
   results = model(img)
   
   # 3. FILTER DETECTIONS BY CONFIDENCE THRESHOLD
-  # Set a minimum confidence threshold to avoid false positives
-  CONFIDENCE_THRESHOLD = 0.8  # Only accept detections with 50% confidence or higher
+  CONFIDENCE_THRESHOLD = 0.8
   
-  # Get the detection boxes from results
+  # Get the detection boxes and masks from results
   boxes = results[0].boxes
+  masks = results[0].masks  # Segmentation masks (None for detection models)
+  
+  # Check if this is a segmentation model
+  has_masks = masks is not None and len(masks) > 0
+  if has_masks:
+    print("🎭 Segmentation model detected - using polygon masks")
+  else:
+    print("📦 Detection model detected - using bounding boxes only")
   
   # Variables for analytics
   detected_fish_types = []
   detected_confidences = []
   is_daing_detected = False
+  filtered_indices = []
+  detection_img = None
+  analysis_img = None
+  color_analysis = None
   
   # Filter detections based on confidence
   if boxes is not None and len(boxes) > 0:
-    # Get confidence scores
     confidences = boxes.conf.cpu().numpy()
-    # Check if any detection meets the threshold
     high_conf_detections = confidences >= CONFIDENCE_THRESHOLD
     
     if not high_conf_detections.any():
-      # NO DAING DETECTED - Add text overlay
-      annotated_img = img.copy()
-      h, w = annotated_img.shape[:2]
+      # NO DAING DETECTED
+      detection_img = img.copy()
+      h, w = detection_img.shape[:2]
       
-      # Add semi-transparent overlay
-      overlay = annotated_img.copy()
+      overlay = detection_img.copy()
       cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
-      cv2.addWeighted(overlay, 0.3, annotated_img, 0.7, 0, annotated_img)
+      cv2.addWeighted(overlay, 0.3, detection_img, 0.7, 0, detection_img)
       
-      # Add "NO DAING DETECTED" text in the center
       text = "NO DAING DETECTED"
       font = cv2.FONT_HERSHEY_SIMPLEX
       font_scale = 1.5
       thickness = 3
       
-      # Get text size for centering
       (text_w, text_h), _ = cv2.getTextSize(text, font, font_scale, thickness)
       text_x = (w - text_w) // 2
       text_y = (h + text_h) // 2
       
-      # Draw text with outline for better visibility
-      cv2.putText(annotated_img, text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness + 2)
-      cv2.putText(annotated_img, text, (text_x, text_y), font, font_scale, (255, 255, 255), thickness)
+      cv2.putText(detection_img, text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness + 2)
+      cv2.putText(detection_img, text, (text_x, text_y), font, font_scale, (255, 255, 255), thickness)
       
       is_daing_detected = False
       print("⚠️ No high-confidence daing detected")
     else:
-      # DAING DETECTED - Filter and draw only high-confidence boxes
-      # Create a mask for high confidence detections
-      indices = [i for i, conf in enumerate(confidences) if conf >= CONFIDENCE_THRESHOLD]
+      # DAING DETECTED
+      filtered_indices = [i for i, conf in enumerate(confidences) if conf >= CONFIDENCE_THRESHOLD]
       
       # Collect analytics data
-      for idx in indices:
+      for idx in filtered_indices:
           fish_type = model.names[int(boxes.cls[idx])]
           confidence = float(boxes.conf[idx])
           detected_fish_types.append(fish_type)
           detected_confidences.append(confidence)
       
-      # Filter the results to only include high-confidence detections
-      filtered_boxes = boxes[indices]
-      results[0].boxes = filtered_boxes
+      # IMAGE 1: Detection with bounding boxes
+      detection_img = draw_detection_boxes(img, results, filtered_indices, model)
       
-      # Draw boxes and labels for filtered detections
-      annotated_img = results[0].plot()
+      # Perform color analysis BEFORE creating analysis image
+      if has_masks:
+          filtered_masks = masks[filtered_indices]
+          filtered_boxes = boxes[filtered_indices] if filtered_indices else None
+          color_analysis = analyze_color_consistency_with_masks(img, filtered_masks, filtered_boxes)
+      else:
+          filtered_boxes = boxes[filtered_indices] if filtered_indices else None
+          color_analysis = analyze_color_consistency_with_boxes(img, filtered_boxes)
+      
+      # IMAGE 2: Analysis with polygon masks and color score
+      if has_masks and color_analysis:
+          analysis_img = draw_color_analysis_image(img, results, filtered_indices, model, color_analysis)
+      else:
+          # If no masks, use detection image with score overlay
+          analysis_img = detection_img.copy()
+          if color_analysis:
+              h, w = analysis_img.shape[:2]
+              # Add score overlay at bottom
+              overlay_height = 80
+              overlay = analysis_img.copy()
+              cv2.rectangle(overlay, (0, h - overlay_height), (w, h), (0, 0, 0), -1)
+              analysis_img = cv2.addWeighted(overlay, 0.7, analysis_img, 0.3, 0)
+              
+              score_text = f"Color: {color_analysis['consistency_score']:.1f}% - {color_analysis['quality_grade']}"
+              font = cv2.FONT_HERSHEY_SIMPLEX
+              (text_w, text_h), _ = cv2.getTextSize(score_text, font, 0.8, 2)
+              cv2.putText(analysis_img, score_text, ((w - text_w) // 2, h - 30), font, 0.8, (255, 255, 255), 2)
+      
       is_daing_detected = True
-      print(f"✅ Found {len(indices)} high-confidence daing detection(s)")
+      print(f"✅ Found {len(filtered_indices)} high-confidence daing detection(s)")
+      if color_analysis:
+          print(f"🎨 Color Analysis: Score={color_analysis['consistency_score']}% Grade={color_analysis['quality_grade']}")
   else:
     # No detections at all
-    annotated_img = img.copy()
-    h, w = annotated_img.shape[:2]
+    detection_img = img.copy()
+    h, w = detection_img.shape[:2]
     
-    # Add semi-transparent overlay
-    overlay = annotated_img.copy()
+    overlay = detection_img.copy()
     cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.3, annotated_img, 0.7, 0, annotated_img)
+    cv2.addWeighted(overlay, 0.3, detection_img, 0.7, 0, detection_img)
     
-    # Add "NO DAING DETECTED" text
     text = "NO DAING DETECTED"
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 1.5
@@ -242,19 +690,17 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
     text_x = (w - text_w) // 2
     text_y = (h + text_h) // 2
     
-    cv2.putText(annotated_img, text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness + 2)
-    cv2.putText(annotated_img, text, (text_x, text_y), font, font_scale, (255, 255, 255), thickness)
+    cv2.putText(detection_img, text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness + 2)
+    cv2.putText(detection_img, text, (text_x, text_y), font, font_scale, (255, 255, 255), thickness)
     
     print("⚠️ No daing detected at all")
 
-  # 4. PREPARE RESPONSE
-  success, encoded_img = cv2.imencode('.jpg', annotated_img)
-  if not success:
-    raise ValueError("Failed to encode image")
-
-  # Convert to bytes - this creates the actual JPEG file data
-  image_bytes = encoded_img.tobytes()
-
+  # 4. ENCODE IMAGES
+  success1, encoded_detection = cv2.imencode('.jpg', detection_img)
+  if not success1:
+    raise ValueError("Failed to encode detection image")
+  detection_bytes = encoded_detection.tobytes()
+  
   # 5. UPLOAD TO CLOUDINARY & LOG HISTORY
   try:
     now = datetime.now()
@@ -262,39 +708,50 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
     history_folder = f"daing-history/{date_folder}"
     history_id = f"scan_{now.strftime('%Y%m%d_%H%M%S_%f')}"
 
-    # We upload the ANNOTATED image (with boxes) so you can see what the AI saw
-    # Use io.BytesIO to create a file-like object from the JPEG encoded data
-    upload_result = cloudinary.uploader.upload(
-      io.BytesIO(image_bytes),
+    # Upload detection image (main history image)
+    detection_upload = cloudinary.uploader.upload(
+      io.BytesIO(detection_bytes),
       folder=history_folder,
       public_id=history_id,
       resource_type="image"
     )
+    detection_url = detection_upload.get("secure_url")
+    
+    # Upload analysis image if we have one
+    analysis_url = None
+    if analysis_img is not None:
+        success2, encoded_analysis = cv2.imencode('.jpg', analysis_img)
+        if success2:
+            analysis_upload = cloudinary.uploader.upload(
+                io.BytesIO(encoded_analysis.tobytes()),
+                folder=history_folder,
+                public_id=f"{history_id}_analysis",
+                resource_type="image"
+            )
+            analysis_url = analysis_upload.get("secure_url")
+            print(f"📊 Analysis image uploaded: {history_id}_analysis")
 
     add_history_entry({
       "id": history_id,
       "timestamp": now.isoformat(),
-      "url": upload_result.get("secure_url"),
+      "url": detection_url,
       "folder": history_folder
     })
     print(f"📚 History saved: {history_folder}/{history_id}")
     
-    # 6. LOG ANALYTICS TO MONGODB (with scan_id for reliable deletion)
-    log_scan_analytics(detected_fish_types, detected_confidences, is_daing_detected, scan_id=history_id)
+    # 6. LOG ANALYTICS TO MONGODB
+    log_scan_analytics(detected_fish_types, detected_confidences, is_daing_detected, scan_id=history_id, color_analysis=color_analysis)
     
     # 7. AUTO-SAVE HIGH-CONFIDENCE IMAGES TO DATASET
-    # Only save if enabled and has detections with 85%+ confidence
     if auto_save_dataset and is_daing_detected and detected_confidences:
       max_confidence = max(detected_confidences) if detected_confidences else 0
       if max_confidence >= 0.85:
         try:
-          # Save ORIGINAL image (not annotated) to dataset folder
           dataset_folder = f"daing-dataset-auto/{date_folder}"
           dataset_id = f"auto_{now.strftime('%Y%m%d_%H%M%S_%f')}"
           
-          # Upload original image bytes (not annotated)
           cloudinary.uploader.upload(
-            contents,  # Original image bytes from earlier
+            contents,
             folder=dataset_folder,
             public_id=dataset_id,
             resource_type="image"
@@ -303,13 +760,28 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
         except Exception as dataset_error:
           print(f"⚠️ Failed to auto-save to dataset: {dataset_error}")
     
+    # 8. RETURN JSON WITH BOTH IMAGE URLS
+    response_data = {
+        "status": "success",
+        "is_daing_detected": is_daing_detected,
+        "detection_image": detection_url,
+        "analysis_image": analysis_url,
+        "detections": [
+            {"fish_type": ft, "confidence": conf} 
+            for ft, conf in zip(detected_fish_types, detected_confidences)
+        ],
+        "color_analysis": color_analysis
+    }
+    
+    return response_data
+    
   except Exception as history_error:
     print(f"⚠️ Failed to save history: {history_error}")
     import traceback
     traceback.print_exc()
-
-  # Return the image with boxes drawn on it
-  return StreamingResponse(io.BytesIO(image_bytes), media_type="image/jpeg")
+    
+    # Return at least the detection image on error
+    return StreamingResponse(io.BytesIO(detection_bytes), media_type="image/jpeg")
 
 
 # --- KEEP YOUR DATASET/HISTORY ENDPOINTS BELOW AS IS ---
@@ -521,7 +993,7 @@ def delete_history(entry_id: str):
 
 @app.get("/analytics/summary")
 async def get_analytics_summary():
-    """Get analytics summary from MongoDB"""
+    """Get analytics summary from MongoDB including color consistency data"""
     if scans_collection is None:
         return {
             "status": "error",
@@ -531,7 +1003,12 @@ async def get_analytics_summary():
             "non_daing_scans": 0,
             "fish_type_distribution": {},
             "average_confidence": {},
-            "daily_scans": {}
+            "daily_scans": {},
+            "color_consistency": {
+                "average_score": 0,
+                "grade_distribution": {"Export": 0, "Local": 0, "Reject": 0},
+                "by_fish_type": {}
+            }
         }
     
     try:
@@ -571,6 +1048,46 @@ async def get_analytics_summary():
         daily = list(scans_collection.aggregate(pipeline))
         daily_scans = {item["_id"]: item["count"] for item in daily}
         
+        # Color Consistency Analysis
+        # Average consistency score across all scans with color data
+        pipeline = [
+            {"$match": {"is_daing": True, "color_analysis.consistency_score": {"$exists": True, "$gt": 0}}},
+            {"$group": {
+                "_id": None,
+                "avg_score": {"$avg": "$color_analysis.consistency_score"},
+                "count": {"$sum": 1}
+            }}
+        ]
+        color_avg = list(scans_collection.aggregate(pipeline))
+        avg_color_score = round(color_avg[0]["avg_score"], 1) if color_avg else 0
+        
+        # Quality grade distribution
+        grade_distribution = {"Export": 0, "Local": 0, "Reject": 0}
+        for grade in ["Export", "Local", "Reject"]:
+            count = scans_collection.count_documents({
+                "is_daing": True,
+                "color_analysis.quality_grade": grade
+            })
+            grade_distribution[grade] = count
+        
+        # Color consistency by fish type (average score per fish type)
+        pipeline = [
+            {"$match": {"is_daing": True, "color_analysis.consistency_score": {"$exists": True, "$gt": 0}}},
+            {"$unwind": "$detections"},
+            {"$group": {
+                "_id": "$detections.fish_type",
+                "avg_score": {"$avg": "$color_analysis.consistency_score"},
+                "count": {"$sum": 1}
+            }}
+        ]
+        color_by_type = list(scans_collection.aggregate(pipeline))
+        color_by_fish_type = {
+            item["_id"]: {
+                "avg_score": round(item["avg_score"], 1),
+                "count": item["count"]
+            } for item in color_by_type
+        }
+        
         return {
             "status": "success",
             "total_scans": total_scans,
@@ -578,11 +1095,18 @@ async def get_analytics_summary():
             "non_daing_scans": non_daing_scans,
             "fish_type_distribution": fish_type_distribution,
             "average_confidence": average_confidence,
-            "daily_scans": daily_scans
+            "daily_scans": daily_scans,
+            "color_consistency": {
+                "average_score": avg_color_score,
+                "grade_distribution": grade_distribution,
+                "by_fish_type": color_by_fish_type
+            }
         }
     
     except Exception as e:
         print(f"❌ Analytics error: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "status": "error",
             "message": str(e),
@@ -591,7 +1115,12 @@ async def get_analytics_summary():
             "non_daing_scans": 0,
             "fish_type_distribution": {},
             "average_confidence": {},
-            "daily_scans": {}
+            "daily_scans": {},
+            "color_consistency": {
+                "average_score": 0,
+                "grade_distribution": {"Export": 0, "Local": 0, "Reject": 0},
+                "by_fish_type": {}
+            }
         }
 
 # ============================================

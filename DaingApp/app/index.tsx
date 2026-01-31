@@ -1,8 +1,9 @@
 import { useState, useRef, useMemo, useEffect } from "react";
-import { View, Button, Alert } from "react-native";
+import { View, Text, TouchableOpacity, Alert, StyleSheet } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
-import { commonStyles } from "../styles/common";
+import { Ionicons } from "@expo/vector-icons";
+import { commonStyles, theme } from "../styles/common";
 import { HomeScreen } from "../components/HomeScreen";
 import { ScanScreen } from "../components/ScanScreen";
 import { AnalyticsScreen } from "../components/AnalyticsScreen";
@@ -12,12 +13,13 @@ import { SettingsModal } from "../components/SettingsModal";
 import { takePicture } from "../utils/camera";
 import { analyzeFish, fetchHistory } from "../services/api";
 import { DEFAULT_SERVER_BASE_URL, getServerUrls } from "../constants/config";
-import type { Screen, HistoryEntry } from "../types";
+import type { Screen, HistoryEntry, AnalysisScanResult } from "../types";
 
 export default function Index() {
   const [permission, requestPermission] = useCameraPermissions();
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [resultImage, setResultImage] = useState<string | null>(null);
+  const [analysisResult, setAnalysisResult] =
+    useState<AnalysisScanResult | null>(null);
   const [loading, setLoading] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
@@ -49,14 +51,34 @@ export default function Index() {
       }
     };
     loadLatestHistory();
-  }, [serverUrls.history, resultImage]); // Refresh when new analysis is done
+  }, [serverUrls.history, analysisResult]); // Refresh when new analysis is done
 
   // Check camera permissions
   if (!permission) return <View />;
   if (!permission.granted) {
     return (
-      <View style={commonStyles.container}>
-        <Button onPress={requestPermission} title="Grant Camera Permission" />
+      <View style={styles.permissionContainer}>
+        <View style={styles.permissionCard}>
+          <View style={styles.permissionIconContainer}>
+            <Ionicons
+              name="camera-outline"
+              size={48}
+              color={theme.colors.primary}
+            />
+          </View>
+          <Text style={styles.permissionTitle}>Camera Access Required</Text>
+          <Text style={styles.permissionText}>
+            To scan and analyze fish, please allow access to your camera.
+          </Text>
+          <TouchableOpacity
+            style={styles.permissionButton}
+            onPress={requestPermission}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="checkmark-circle" size={20} color="#fff" />
+            <Text style={styles.permissionButtonText}>Grant Permission</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -99,7 +121,7 @@ export default function Index() {
         serverUrls.analyze,
         autoSaveDataset,
       );
-      setResultImage(result);
+      setAnalysisResult(result);
     } catch (error) {
       Alert.alert(
         "Connection Failed",
@@ -112,7 +134,7 @@ export default function Index() {
 
   const handleReset = () => {
     setCapturedImage(null);
-    setResultImage(null);
+    setAnalysisResult(null);
     setLoading(false);
   };
 
@@ -181,7 +203,7 @@ export default function Index() {
     <ScanScreen
       cameraRef={cameraRef}
       capturedImage={capturedImage}
-      resultImage={resultImage}
+      analysisResult={analysisResult}
       loading={loading}
       latestHistoryImage={latestHistoryEntry?.url || null}
       onNavigate={setCurrentScreen}
@@ -193,3 +215,61 @@ export default function Index() {
     />
   );
 }
+
+const styles = StyleSheet.create({
+  permissionContainer: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  permissionCard: {
+    backgroundColor: theme.colors.backgroundLight,
+    borderRadius: 24,
+    padding: 32,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    maxWidth: 340,
+    width: "100%",
+  },
+  permissionIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: theme.colors.primary + "20",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  permissionTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  permissionText: {
+    fontSize: 15,
+    color: theme.colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  permissionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+    gap: 8,
+  },
+  permissionButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+});

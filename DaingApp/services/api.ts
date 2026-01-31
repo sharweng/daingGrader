@@ -1,5 +1,9 @@
 import axios from "axios";
-import type { HistoryEntry, AnalyticsSummary } from "../types";
+import type {
+  HistoryEntry,
+  AnalyticsSummary,
+  AnalysisScanResult,
+} from "../types";
 
 const normalizeUrl = (url: string) => url.trim().replace(/\/+$/, "");
 
@@ -38,7 +42,7 @@ export const analyzeFish = async (
   imageUri: string,
   serverUrl: string,
   autoSaveDataset: boolean = false,
-): Promise<string> => {
+): Promise<AnalysisScanResult> => {
   const formData = new FormData();
   // @ts-ignore: React Native FormData requires these specific fields
   formData.append("file", {
@@ -55,29 +59,15 @@ export const analyzeFish = async (
   try {
     const response = await withRetry(
       () =>
-        axios.post(urlWithParams, formData, {
+        axios.post<AnalysisScanResult>(urlWithParams, formData, {
           headers: { "Content-Type": "multipart/form-data" },
-          responseType: "blob",
-          timeout: 30000, // 30 seconds timeout (increased from 10)
+          timeout: 30000,
         }),
-      3, // 3 retries
-      1000, // 1 second delay between retries
+      3,
+      1000,
     );
 
-    // Convert Blob to Viewable Image
-    return new Promise((resolve, reject) => {
-      const fileReaderInstance = new FileReader();
-      fileReaderInstance.readAsDataURL(response.data);
-      fileReaderInstance.onload = () => {
-        if (typeof fileReaderInstance.result === "string") {
-          resolve(fileReaderInstance.result);
-        } else {
-          reject(new Error("Failed to convert image"));
-        }
-      };
-      fileReaderInstance.onerror = () =>
-        reject(new Error("Failed to read image"));
-    });
+    return response.data;
   } catch (error: any) {
     if (error.code === "ECONNABORTED" || error.message?.includes("timeout")) {
       throw new Error(
@@ -146,6 +136,11 @@ export const fetchAnalytics = async (
       fish_type_distribution: {},
       average_confidence: {},
       daily_scans: {},
+      color_consistency: {
+        average_score: 0,
+        grade_distribution: { Export: 0, Local: 0, Reject: 0 },
+        by_fish_type: {},
+      },
     };
   }
 };
