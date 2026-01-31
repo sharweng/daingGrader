@@ -9,25 +9,8 @@ export const getServerUrls = (baseUrl: string) => {
   const normalized = normalizeBaseUrl(baseUrl || DEFAULT_SERVER_BASE_URL);
   return {
     analyze: `${normalized}/analyze`,
-    uploadDataset: `${normalized}/upload-dataset`,
     history: `${normalized}/history`,
     analytics: `${normalized}/analytics/summary`,
+    autoDataset: `${normalized}/auto-dataset`,
   } as const;
 };
-
-// Fish types available in the app
-export const FISH_TYPES = [
-  "danggit",
-  "galunggong",
-  "espada",
-  "bangus",
-  "pusit",
-] as const;
-
-// Condition options for data gathering
-export const CONDITIONS = [
-  { label: "Local", value: "local_quality" },
-  { label: "Export", value: "export_quality" },
-  { label: "Moldy", value: "moldy" },
-  { label: "Fresh", value: "fresh" },
-] as const;

@@ -5,18 +5,18 @@ import { modalStyles } from "../styles/modal";
 
 interface SettingsModalProps {
   visible: boolean;
-  devMode: boolean;
+  autoSaveDataset: boolean;
   serverBaseUrl: string;
-  onToggleDevMode: () => void;
+  onToggleAutoSaveDataset: () => void;
   onSetServerUrl: (url: string) => void;
   onClose: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   visible,
-  devMode,
+  autoSaveDataset,
   serverBaseUrl,
-  onToggleDevMode,
+  onToggleAutoSaveDataset,
   onSetServerUrl,
   onClose,
 }) => {
@@ -28,10 +28,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       onRequestClose={onClose}
     >
       <View style={modalStyles.modalOverlay}>
-        <TouchableOpacity 
-          style={{ flex: 1 }} 
-          activeOpacity={1} 
-          onPress={onClose} 
+        <TouchableOpacity
+          style={{ flex: 1 }}
+          activeOpacity={1}
+          onPress={onClose}
         />
         <View style={modalStyles.modalContent}>
           <View style={modalStyles.modalHandle} />
@@ -57,21 +57,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           <TouchableOpacity
             style={modalStyles.settingRow}
-            onPress={onToggleDevMode}
+            onPress={onToggleAutoSaveDataset}
           >
-            <Text style={modalStyles.settingText}>Developer Mode</Text>
+            <Text style={modalStyles.settingText}>Auto-Save to Dataset</Text>
             <View
               style={[
                 modalStyles.checkbox,
-                devMode && modalStyles.checkboxActive,
+                autoSaveDataset && modalStyles.checkboxActive,
               ]}
             >
-              {devMode && <Ionicons name="checkmark" size={18} color="white" />}
+              {autoSaveDataset && (
+                <Ionicons name="checkmark" size={18} color="white" />
+              )}
             </View>
           </TouchableOpacity>
 
           <Text style={modalStyles.settingDescription}>
-            Enables data gathering mode for building training datasets
+            Automatically save high-confidence scans (85%+) to training dataset
           </Text>
 
           <TouchableOpacity style={modalStyles.closeButton} onPress={onClose}>

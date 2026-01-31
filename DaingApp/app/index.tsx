@@ -6,14 +6,13 @@ import { commonStyles } from "../styles/common";
 import { HomeScreen } from "../components/HomeScreen";
 import { ScanScreen } from "../components/ScanScreen";
 import { AnalyticsScreen } from "../components/AnalyticsScreen";
-import { DataGatheringScreen } from "../components/DataGatheringScreen";
 import { HistoryScreen } from "../components/HistoryScreen";
-import { DatasetScreen } from "../components/DatasetScreen";
+import { AutoDatasetScreen } from "../components/AutoDatasetScreen";
 import { SettingsModal } from "../components/SettingsModal";
 import { takePicture } from "../utils/camera";
-import { analyzeFish, uploadDataset, fetchHistory } from "../services/api";
+import { analyzeFish, fetchHistory } from "../services/api";
 import { DEFAULT_SERVER_BASE_URL, getServerUrls } from "../constants/config";
-import type { Screen, FishType, Condition, HistoryEntry } from "../types";
+import type { Screen, HistoryEntry } from "../types";
 
 export default function Index() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -25,16 +24,14 @@ export default function Index() {
   // Navigation & Settings
   const [currentScreen, setCurrentScreen] = useState<Screen>("home");
   const [showSettings, setShowSettings] = useState(false);
-  const [devMode, setDevMode] = useState(false);
+  const [autoSaveDataset, setAutoSaveDataset] = useState(false);
   const [serverBaseUrl, setServerBaseUrl] = useState(DEFAULT_SERVER_BASE_URL);
   const serverUrls = useMemo(
     () => getServerUrls(serverBaseUrl),
     [serverBaseUrl],
   );
 
-  // Data Gathering Mode
-  const [fishType, setFishType] = useState<FishType>("danggit");
-  const [condition, setCondition] = useState<Condition>("local_quality");
+  // History state
   const [latestHistoryEntry, setLatestHistoryEntry] =
     useState<HistoryEntry | null>(null);
   const [viewingFromScan, setViewingFromScan] = useState(false);
@@ -97,7 +94,11 @@ export default function Index() {
     setLoading(true);
 
     try {
-      const result = await analyzeFish(capturedImage, serverUrls.analyze);
+      const result = await analyzeFish(
+        capturedImage,
+        serverUrls.analyze,
+        autoSaveDataset,
+      );
       setResultImage(result);
     } catch (error) {
       Alert.alert(
@@ -105,42 +106,6 @@ export default function Index() {
         `Make sure your server URL is correct.\nCurrent Target: ${serverBaseUrl}`,
       );
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUploadDataset = async () => {
-    if (!capturedImage) return;
-    setLoading(true);
-
-    try {
-      const result = await uploadDataset(
-        capturedImage,
-        fishType,
-        condition,
-        serverUrls.uploadDataset,
-      );
-
-      if (result.success) {
-        Alert.alert(
-          "Success",
-          `${result.message}\n\nSaved to: ${fishType}/${condition}/`,
-        );
-        handleReset();
-      } else {
-        Alert.alert(
-          "Upload Failed",
-          result.error ||
-            "Unknown error occurred. Image was NOT saved to Cloudinary.",
-        );
-        setLoading(false);
-      }
-    } catch (error) {
-      console.error("Upload Error:", error);
-      Alert.alert(
-        "Upload Failed",
-        "Network error. Check your server connection. Image was NOT saved.",
-      );
       setLoading(false);
     }
   };
@@ -166,13 +131,13 @@ export default function Index() {
         <HomeScreen
           onNavigate={setCurrentScreen}
           onOpenSettings={() => setShowSettings(true)}
-          devMode={devMode}
+          autoSaveDataset={autoSaveDataset}
         />
         <SettingsModal
           visible={showSettings}
-          devMode={devMode}
+          autoSaveDataset={autoSaveDataset}
           serverBaseUrl={serverBaseUrl}
-          onToggleDevMode={() => setDevMode(!devMode)}
+          onToggleAutoSaveDataset={() => setAutoSaveDataset(!autoSaveDataset)}
           onSetServerUrl={setServerBaseUrl}
           onClose={() => setShowSettings(false)}
         />
@@ -202,24 +167,11 @@ export default function Index() {
     );
   }
 
-  if (currentScreen === "dataset") {
-    return <DatasetScreen onNavigate={setCurrentScreen} />;
-  }
-
-  if (currentScreen === "dataGathering") {
+  if (currentScreen === "autoDataset") {
     return (
-      <DataGatheringScreen
-        cameraRef={cameraRef}
-        capturedImage={capturedImage}
-        loading={loading}
-        fishType={fishType}
-        condition={condition}
+      <AutoDatasetScreen
         onNavigate={setCurrentScreen}
-        onTakePicture={handleTakePicture}
-        onUpload={handleUploadDataset}
-        onReset={handleReset}
-        onSetFishType={setFishType}
-        onSetCondition={setCondition}
+        autoDatasetUrl={serverUrls.autoDataset}
       />
     );
   }

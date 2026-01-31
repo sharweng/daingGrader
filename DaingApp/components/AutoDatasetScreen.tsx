@@ -22,35 +22,31 @@ import { Ionicons } from "@expo/vector-icons";
 import { commonStyles, theme } from "../styles/common";
 import { historyStyles } from "../styles/history";
 import type { Screen, HistoryEntry } from "../types";
-import { fetchHistory, deleteHistoryEntry } from "../services/api";
+import { fetchAutoDataset, deleteAutoDatasetEntry } from "../services/api";
 
-interface HistoryScreenProps {
+interface AutoDatasetScreenProps {
   onNavigate: (screen: Screen) => void;
-  historyUrl: string;
-  initialEntry?: HistoryEntry | null;
+  autoDatasetUrl: string;
 }
 
-export const HistoryScreen: React.FC<HistoryScreenProps> = ({
+const NUM_COLUMNS = 3;
+
+export const AutoDatasetScreen: React.FC<AutoDatasetScreenProps> = ({
   onNavigate,
-  historyUrl,
-  initialEntry = null,
+  autoDatasetUrl,
 }) => {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedEntry, setSelectedEntry] = useState<HistoryEntry | null>(
-    initialEntry,
-  );
+  const [selectedEntry, setSelectedEntry] = useState<HistoryEntry | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
-  const NUM_COLUMNS = 3;
-
   const photoSize = useMemo(() => {
     const screenWidth = Dimensions.get("window").width;
-    const horizontalPadding = 32; // scrollContent paddingHorizontal: 16 * 2
-    const gapSize = 4; // gap between images
+    const horizontalPadding = 32;
+    const gapSize = 4;
     const totalGaps = (NUM_COLUMNS - 1) * gapSize;
     return Math.floor(
       (screenWidth - horizontalPadding - totalGaps) / NUM_COLUMNS,
@@ -72,7 +68,6 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
     const map = new Map<string, HistoryEntry[]>();
     entries.forEach((entry) => {
       const date = new Date(entry.timestamp);
-      // Use local date components instead of ISO to avoid timezone issues
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const day = String(date.getDate()).padStart(2, "0");
@@ -100,48 +95,48 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
       }));
   }, [entries, chunkEntries]);
 
-  const loadHistory = useCallback(async () => {
+  const loadDataset = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchHistory(historyUrl);
+      const data = await fetchAutoDataset(autoDatasetUrl);
       setEntries(data);
     } catch (error) {
       Alert.alert(
-        "History",
-        "Unable to load history from the server. Please try again.",
+        "Dataset",
+        "Unable to load dataset from the server. Please try again.",
       );
     } finally {
       setLoading(false);
     }
-  }, [historyUrl]);
+  }, [autoDatasetUrl]);
 
   useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
+    loadDataset();
+  }, [loadDataset]);
 
   const handleDeleteEntry = useCallback(
     async (entry: HistoryEntry) => {
       if (isDeleting) return;
       setIsDeleting(true);
       try {
-        await deleteHistoryEntry(historyUrl, entry.id);
+        await deleteAutoDatasetEntry(autoDatasetUrl, entry.id);
         setEntries((prev) => prev.filter((item) => item.id !== entry.id));
         setSelectedEntry(null);
       } catch (error) {
         Alert.alert(
           "Delete Failed",
-          "We couldn't delete this photo. Please try again.",
+          "We couldn't delete this image. Please try again.",
         );
       } finally {
         setIsDeleting(false);
       }
     },
-    [historyUrl, isDeleting],
+    [autoDatasetUrl, isDeleting],
   );
 
   const confirmDelete = useCallback(
     (entry: HistoryEntry) => {
-      Alert.alert("Delete Photo", "Remove this scan from history?", [
+      Alert.alert("Delete Image", "Remove this image from dataset?", [
         { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
@@ -168,7 +163,6 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
           } else {
             newSet.add(entry.id);
           }
-          // Exit selection mode if no items selected
           if (newSet.size === 0) {
             setIsSelectionMode(false);
           }
@@ -185,8 +179,8 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
     if (selectedIds.size === 0) return;
 
     Alert.alert(
-      "Delete Photos",
-      `Remove ${selectedIds.size} photo${selectedIds.size > 1 ? "s" : ""} from history?`,
+      "Delete Images",
+      `Remove ${selectedIds.size} image${selectedIds.size > 1 ? "s" : ""} from dataset?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -196,7 +190,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
             setIsDeleting(true);
             try {
               const deletePromises = Array.from(selectedIds).map((id) =>
-                deleteHistoryEntry(historyUrl, id),
+                deleteAutoDatasetEntry(autoDatasetUrl, id),
               );
               await Promise.all(deletePromises);
               setEntries((prev) =>
@@ -207,7 +201,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
             } catch (error) {
               Alert.alert(
                 "Delete Failed",
-                "We couldn't delete some photos. Please try again.",
+                "Some images couldn't be deleted. Please try again.",
               );
             } finally {
               setIsDeleting(false);
@@ -216,37 +210,41 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
         },
       ],
     );
-  }, [selectedIds, historyUrl]);
+  }, [selectedIds, autoDatasetUrl]);
 
-  const cancelSelection = useCallback(() => {
-    setSelectedIds(new Set());
+  const handleCancelSelection = useCallback(() => {
     setIsSelectionMode(false);
+    setSelectedIds(new Set());
   }, []);
 
-  const handleSelectAllInDate = useCallback((dateEntries: HistoryEntry[]) => {
-    setSelectedIds((prev) => {
-      const newSet = new Set(prev);
-      const allSelected = dateEntries.every((entry) => newSet.has(entry.id));
+  const handleSelectAllInDate = useCallback(
+    (dateEntries: HistoryEntry[]) => {
+      const allIds = dateEntries.map((e) => e.id);
+      const allSelected = allIds.every((id) => selectedIds.has(id));
 
       if (allSelected) {
-        // Deselect all in this date
-        dateEntries.forEach((entry) => newSet.delete(entry.id));
+        setSelectedIds((prev) => {
+          const newSet = new Set(prev);
+          allIds.forEach((id) => newSet.delete(id));
+          if (newSet.size === 0) {
+            setIsSelectionMode(false);
+          }
+          return newSet;
+        });
       } else {
-        // Select all in this date
-        dateEntries.forEach((entry) => newSet.add(entry.id));
+        setSelectedIds((prev) => {
+          const newSet = new Set(prev);
+          allIds.forEach((id) => newSet.add(id));
+          return newSet;
+        });
       }
-
-      // Exit selection mode if no items selected
-      if (newSet.size === 0) {
-        setIsSelectionMode(false);
-      }
-      return newSet;
-    });
-  }, []);
+    },
+    [selectedIds],
+  );
 
   const isAllSelectedInDate = useCallback(
     (dateEntries: HistoryEntry[]) => {
-      return dateEntries.every((entry) => selectedIds.has(entry.id));
+      return dateEntries.every((e) => selectedIds.has(e.id));
     },
     [selectedIds],
   );
@@ -258,7 +256,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
 
   const showEmpty = !loading && entries.length === 0;
 
-  // If viewing a specific entry, show full-screen view with horizontal swipe
+  // Full-screen view
   if (selectedEntry) {
     const formattedTimestamp = new Date(
       selectedEntry.timestamp,
@@ -354,40 +352,41 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
     );
   }
 
-  return (
-    <View style={commonStyles.container}>
-      {/* Deletion Loading Overlay */}
-      {isDeleting && (
+  // Deletion overlay
+  if (isDeleting) {
+    return (
+      <View style={commonStyles.container}>
         <View style={historyStyles.deletionOverlay}>
           <View style={historyStyles.deletionCard}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
             <Text style={historyStyles.deletionText}>
-              Deleting{" "}
-              {selectedIds.size > 0
-                ? `${selectedIds.size} photo${selectedIds.size > 1 ? "s" : ""}`
-                : "photo"}
-              ...
+              Deleting {selectedIds.size > 0 ? selectedIds.size : 1} image
+              {selectedIds.size > 1 ? "s" : ""}...
             </Text>
           </View>
         </View>
-      )}
+      </View>
+    );
+  }
 
+  // Main grid view
+  return (
+    <View style={commonStyles.container}>
       <View style={commonStyles.screenHeader}>
         {isSelectionMode ? (
           <>
             <TouchableOpacity
               style={styles.headerButton}
-              onPress={cancelSelection}
+              onPress={handleCancelSelection}
             >
               <Ionicons name="close" size={24} color={theme.colors.text} />
             </TouchableOpacity>
             <Text style={commonStyles.screenTitle}>
-              {selectedIds.size} selected
+              {selectedIds.size} Selected
             </Text>
             <TouchableOpacity
               style={styles.headerButton}
               onPress={handleBatchDelete}
-              disabled={isDeleting}
             >
               <Ionicons
                 name="trash-outline"
@@ -404,8 +403,10 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
             >
               <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
             </TouchableOpacity>
-            <Text style={commonStyles.screenTitle}>History</Text>
-            <View style={{ width: 40 }} />
+            <Text style={commonStyles.screenTitle}>Auto Dataset</Text>
+            <TouchableOpacity style={styles.headerButton} onPress={loadDataset}>
+              <Ionicons name="refresh" size={22} color={theme.colors.primary} />
+            </TouchableOpacity>
           </>
         )}
       </View>
@@ -414,24 +415,25 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
         {loading && entries.length === 0 ? (
           <View style={historyStyles.loadingCenter}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={historyStyles.loadingText}>Loading History...</Text>
+            <Text style={historyStyles.loadingText}>Loading Dataset...</Text>
           </View>
         ) : showEmpty ? (
           <View style={historyStyles.emptyStateWrapper}>
             <View style={historyStyles.emptyIcon}>
               <Ionicons
-                name="time-outline"
+                name="folder-open-outline"
                 size={48}
                 color={theme.colors.textMuted}
               />
             </View>
-            <Text style={historyStyles.emptyTitle}>No scans yet</Text>
+            <Text style={historyStyles.emptyTitle}>No dataset images</Text>
             <Text style={historyStyles.emptySubtitle}>
-              Scan fish to see your previous analyses here.
+              High-confidence scans (85%+) will appear here when auto-save is
+              enabled.
             </Text>
             <TouchableOpacity
               style={commonStyles.refreshButton}
-              onPress={loadHistory}
+              onPress={loadDataset}
               activeOpacity={0.8}
             >
               <Ionicons name="refresh" size={20} color={theme.colors.text} />
@@ -441,12 +443,11 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
         ) : (
           <ScrollView
             refreshControl={
-              <RefreshControl refreshing={loading} onRefresh={loadHistory} />
+              <RefreshControl refreshing={loading} onRefresh={loadDataset} />
             }
             contentContainerStyle={historyStyles.scrollContent}
           >
             {sections.map((section) => {
-              // Get all entries for this date section
               const allEntriesInSection = section.rows.flat();
               const allSelectedInSection =
                 isAllSelectedInDate(allEntriesInSection);

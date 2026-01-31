@@ -7,13 +7,13 @@ import type { Screen } from "../types";
 interface HomeScreenProps {
   onNavigate: (screen: Screen) => void;
   onOpenSettings: () => void;
-  devMode: boolean;
+  autoSaveDataset: boolean;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   onNavigate,
   onOpenSettings,
-  devMode,
+  autoSaveDataset,
 }) => {
   return (
     <View style={homeStyles.homeContainer}>
@@ -69,27 +69,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </TouchableOpacity>
         </View>
 
-        {devMode && (
+        {autoSaveDataset && (
           <View style={homeStyles.buttonRow}>
             <TouchableOpacity
-              style={[homeStyles.gridButton, homeStyles.devButton]}
-              onPress={() => onNavigate("dataGathering")}
+              style={[homeStyles.gridButton, homeStyles.datasetButton]}
+              onPress={() => onNavigate("autoDataset")}
               activeOpacity={0.7}
             >
-              <Ionicons name="camera-outline" size={22} color="#A78BFA" />
-              <Text style={[homeStyles.gridButtonText, homeStyles.devButtonText]}>
-                Data Gathering
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[homeStyles.gridButton, homeStyles.devButton]}
-              onPress={() => onNavigate("dataset")}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="folder-outline" size={22} color="#A78BFA" />
-              <Text style={[homeStyles.gridButtonText, homeStyles.devButtonText]}>
-                Dataset
+              <Ionicons name="folder-outline" size={22} color="#10B981" />
+              <Text
+                style={[
+                  homeStyles.gridButtonText,
+                  homeStyles.datasetButtonText,
+                ]}
+              >
+                Auto Dataset
               </Text>
             </TouchableOpacity>
           </View>

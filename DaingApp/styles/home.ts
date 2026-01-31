@@ -2,16 +2,16 @@ import { StyleSheet } from "react-native";
 
 const theme = {
   colors: {
-    primary: '#3B82F6',
-    primaryDark: '#2563EB',
-    accent: '#8B5CF6',
-    success: '#10B981',
-    background: '#0F172A',
-    backgroundLight: '#1E293B',
-    surface: '#1E293B',
-    text: '#FFFFFF',
-    textSecondary: '#94A3B8',
-    border: '#334155',
+    primary: "#3B82F6",
+    primaryDark: "#2563EB",
+    accent: "#8B5CF6",
+    success: "#10B981",
+    background: "#0F172A",
+    backgroundLight: "#1E293B",
+    surface: "#1E293B",
+    text: "#FFFFFF",
+    textSecondary: "#94A3B8",
+    border: "#334155",
   },
 };
 
@@ -20,7 +20,7 @@ export const homeStyles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  
+
   // Header
   header: {
     flexDirection: "row",
@@ -30,14 +30,14 @@ export const homeStyles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 16,
   },
-  
+
   appTitle: {
     fontSize: 22,
     fontWeight: "700",
     color: theme.colors.text,
     letterSpacing: 0.5,
   },
-  
+
   settingsButton: {
     width: 44,
     height: 44,
@@ -46,7 +46,7 @@ export const homeStyles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  
+
   // Hero section with scan button
   heroSection: {
     flex: 1,
@@ -54,7 +54,7 @@ export const homeStyles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 24,
   },
-  
+
   heroButton: {
     width: 220,
     height: 220,
@@ -68,11 +68,11 @@ export const homeStyles = StyleSheet.create({
     shadowRadius: 30,
     elevation: 12,
   },
-  
+
   heroButtonInner: {
     alignItems: "center",
   },
-  
+
   heroButtonText: {
     fontSize: 28,
     fontWeight: "bold",
@@ -80,13 +80,13 @@ export const homeStyles = StyleSheet.create({
     marginTop: 12,
     letterSpacing: 2,
   },
-  
+
   heroButtonSubtext: {
     fontSize: 13,
     color: "rgba(255,255,255,0.8)",
     marginTop: 4,
   },
-  
+
   // Tagline under hero
   tagline: {
     fontSize: 15,
@@ -94,19 +94,19 @@ export const homeStyles = StyleSheet.create({
     marginTop: 32,
     textAlign: "center",
   },
-  
+
   // Button grid at bottom
   buttonGrid: {
     paddingHorizontal: 16,
     paddingBottom: 40,
     gap: 12,
   },
-  
+
   buttonRow: {
     flexDirection: "row",
     gap: 12,
   },
-  
+
   // Modern card-style navigation buttons
   gridButton: {
     flex: 1,
@@ -121,29 +121,24 @@ export const homeStyles = StyleSheet.create({
     borderColor: theme.colors.border,
     gap: 10,
   },
-  
+
   gridButtonIcon: {
     marginRight: 4,
   },
-  
+
   gridButtonText: {
     fontSize: 15,
     fontWeight: "600",
     color: theme.colors.text,
   },
-  
-  // Dev mode buttons (purple accent)
-  devButton: {
-    backgroundColor: "rgba(139, 92, 246, 0.15)",
-    borderColor: "rgba(139, 92, 246, 0.4)",
+
+  // Dataset button (green accent)
+  datasetButton: {
+    backgroundColor: "rgba(16, 185, 129, 0.15)",
+    borderColor: "rgba(16, 185, 129, 0.4)",
   },
-  
-  devButtonText: {
-    color: "#A78BFA",
-  },
-  
-  hiddenButton: {
-    opacity: 0,
-    pointerEvents: "none",
+
+  datasetButtonText: {
+    color: "#10B981",
   },
 });

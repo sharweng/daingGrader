@@ -1,10 +1,5 @@
 import axios from "axios";
-import type {
-  FishType,
-  Condition,
-  HistoryEntry,
-  AnalyticsSummary,
-} from "../types";
+import type { HistoryEntry, AnalyticsSummary } from "../types";
 
 const normalizeUrl = (url: string) => url.trim().replace(/\/+$/, "");
 
@@ -42,6 +37,7 @@ const withRetry = async <T>(
 export const analyzeFish = async (
   imageUri: string,
   serverUrl: string,
+  autoSaveDataset: boolean = false,
 ): Promise<string> => {
   const formData = new FormData();
   // @ts-ignore: React Native FormData requires these specific fields
@@ -51,10 +47,15 @@ export const analyzeFish = async (
     type: "image/jpeg",
   });
 
+  // Add auto_save_dataset flag to request
+  const urlWithParams = autoSaveDataset
+    ? `${serverUrl}?auto_save_dataset=true`
+    : serverUrl;
+
   try {
     const response = await withRetry(
       () =>
-        axios.post(serverUrl, formData, {
+        axios.post(urlWithParams, formData, {
           headers: { "Content-Type": "multipart/form-data" },
           responseType: "blob",
           timeout: 30000, // 30 seconds timeout (increased from 10)
@@ -91,74 +92,6 @@ export const analyzeFish = async (
       );
     } else {
       throw new Error(error.message || "Failed to analyze image");
-    }
-  }
-};
-
-export const uploadDataset = async (
-  imageUri: string,
-  fishType: FishType,
-  condition: Condition,
-  uploadUrl: string,
-): Promise<{ success: boolean; message: string; error?: string }> => {
-  const formData = new FormData();
-  // @ts-ignore: React Native FormData requires these specific fields
-  formData.append("file", {
-    uri: imageUri,
-    name: `${fishType}_${condition}_${Date.now()}.jpg`,
-    type: "image/jpeg",
-  });
-  formData.append("fish_type", fishType);
-  formData.append("condition", condition);
-
-  try {
-    const response = await axios.post(uploadUrl, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-      timeout: 10000, // 10 seconds timeout
-    });
-
-    // Check if backend returned success status
-    if (response.data.status === "success") {
-      return {
-        success: true,
-        message: "Image uploaded to Cloudinary successfully!",
-      };
-    } else if (response.data.status === "error") {
-      return {
-        success: false,
-        message: "Upload failed",
-        error: response.data.message || "Unknown error occurred",
-      };
-    } else {
-      return {
-        success: false,
-        message: "Upload failed",
-        error: "Unexpected response from server",
-      };
-    }
-  } catch (error: any) {
-    if (error.code === "ECONNABORTED" || error.message?.includes("timeout")) {
-      return {
-        success: false,
-        message: "Request timed out",
-        error: "Connection timed out. Please check your server IP address.",
-      };
-    } else if (
-      error.code === "ERR_NETWORK" ||
-      error.message?.includes("Network Error")
-    ) {
-      return {
-        success: false,
-        message: "Cannot connect to server",
-        error:
-          "Unable to reach server. Please verify the IP address is correct.",
-      };
-    } else {
-      return {
-        success: false,
-        message: "Network error",
-        error: error.message || "Failed to connect to server",
-      };
     }
   }
 };
@@ -215,4 +148,32 @@ export const fetchAnalytics = async (
       daily_scans: {},
     };
   }
+};
+
+export const fetchAutoDataset = async (
+  autoDatasetUrl: string,
+): Promise<HistoryEntry[]> => {
+  try {
+    const response = await axios.get(normalizeUrl(autoDatasetUrl), {
+      timeout: 10000,
+    });
+    const entries = response.data?.entries;
+    if (Array.isArray(entries)) {
+      return entries as HistoryEntry[];
+    }
+    return [];
+  } catch (error: any) {
+    return [];
+  }
+};
+
+export const deleteAutoDatasetEntry = async (
+  autoDatasetUrl: string,
+  entryId: string,
+): Promise<void> => {
+  const base = normalizeUrl(autoDatasetUrl);
+  const encodedId = encodeURIComponent(entryId);
+  await axios.delete(`${base}/${encodedId}`, {
+    timeout: 10000,
+  });
 };

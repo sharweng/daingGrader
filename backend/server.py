@@ -144,8 +144,8 @@ def log_scan_analytics(fish_types: list, confidences: list, is_daing: bool, scan
         print(f"⚠️ Failed to log analytics: {e}")
 
 @app.post("/analyze")
-async def analyze_fish(file: UploadFile = File(...)):
-  print("Received an image for AI Analysis...") 
+async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = False):
+  print(f"Received an image for AI Analysis... (auto_save_dataset: {auto_save_dataset})") 
   
   # 1. READ IMAGE
   contents = await file.read()
@@ -281,6 +281,27 @@ async def analyze_fish(file: UploadFile = File(...)):
     
     # 6. LOG ANALYTICS TO MONGODB (with scan_id for reliable deletion)
     log_scan_analytics(detected_fish_types, detected_confidences, is_daing_detected, scan_id=history_id)
+    
+    # 7. AUTO-SAVE HIGH-CONFIDENCE IMAGES TO DATASET
+    # Only save if enabled and has detections with 85%+ confidence
+    if auto_save_dataset and is_daing_detected and detected_confidences:
+      max_confidence = max(detected_confidences) if detected_confidences else 0
+      if max_confidence >= 0.85:
+        try:
+          # Save ORIGINAL image (not annotated) to dataset folder
+          dataset_folder = f"daing-dataset-auto/{date_folder}"
+          dataset_id = f"auto_{now.strftime('%Y%m%d_%H%M%S_%f')}"
+          
+          # Upload original image bytes (not annotated)
+          cloudinary.uploader.upload(
+            contents,  # Original image bytes from earlier
+            folder=dataset_folder,
+            public_id=dataset_id,
+            resource_type="image"
+          )
+          print(f"📁 Auto-saved to dataset: {dataset_folder}/{dataset_id} (confidence: {max_confidence:.1%})")
+        except Exception as dataset_error:
+          print(f"⚠️ Failed to auto-save to dataset: {dataset_error}")
     
   except Exception as history_error:
     print(f"⚠️ Failed to save history: {history_error}")
@@ -572,3 +593,97 @@ async def get_analytics_summary():
             "average_confidence": {},
             "daily_scans": {}
         }
+
+# ============================================
+# AUTO DATASET ENDPOINTS
+# ============================================
+
+@app.get("/auto-dataset")
+def get_auto_dataset():
+    """Fetch auto-saved dataset images from Cloudinary"""
+    try:
+        result = cloudinary.api.resources(
+            type="upload",
+            prefix="daing-dataset-auto/",
+            max_results=500,
+            resource_type="image"
+        )
+        
+        entries = []
+        for resource in result.get("resources", []):
+            public_id = resource.get("public_id", "")
+            # public_id format: "daing-dataset-auto/2026-01-30/auto_20260130_123456_789012"
+            parts = public_id.split("/")
+            
+            # Handle both formats: with date folder (3+ parts) or without (2 parts)
+            if len(parts) >= 2:
+                if len(parts) >= 3:
+                    folder = "/".join(parts[:2])
+                    image_id = parts[-1]  # Get the last part as image_id
+                else:
+                    folder = parts[0]
+                    image_id = parts[-1]
+                
+                # Parse timestamp from image_id (auto_YYYYMMDD_HHMMSS_ffffff)
+                try:
+                    timestamp_str = image_id.replace("auto_", "")
+                    date_part = timestamp_str[:8]
+                    time_part = timestamp_str[9:15] if len(timestamp_str) > 9 else "000000"
+                    micro_part = timestamp_str[16:] if len(timestamp_str) > 16 else "000000"
+                    iso_timestamp = f"{date_part[:4]}-{date_part[4:6]}-{date_part[6:8]}T{time_part[:2]}:{time_part[2:4]}:{time_part[4:6]}.{micro_part}"
+                except:
+                    iso_timestamp = resource.get("created_at", "")
+                
+                entries.append({
+                    "id": image_id,
+                    "timestamp": iso_timestamp,
+                    "url": resource.get("secure_url"),
+                    "folder": folder,
+                    "public_id": public_id  # Include full public_id for deletion
+                })
+        
+        print(f"📁 Auto-dataset: Found {len(entries)} images")
+        entries.sort(key=lambda x: x["timestamp"], reverse=True)
+        return {"status": "success", "entries": entries}
+    except Exception as e:
+        print(f"⚠️ Failed to fetch auto-dataset: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"status": "error", "entries": [], "message": str(e)}
+
+@app.delete("/auto-dataset/{entry_id}")
+def delete_auto_dataset_entry(entry_id: str):
+    """Delete an auto-saved dataset image from Cloudinary"""
+    try:
+        folder_to_check = None
+        
+        # Search in Cloudinary for this entry
+        result = cloudinary.api.resources(
+            type="upload",
+            prefix="daing-dataset-auto/",
+            max_results=500,
+            resource_type="image"
+        )
+        
+        for resource in result.get("resources", []):
+            public_id = resource.get("public_id", "")
+            if entry_id in public_id:
+                # Extract folder path for cleanup
+                parts = public_id.rsplit("/", 1)
+                if len(parts) > 1:
+                    folder_to_check = parts[0]
+                
+                # Delete from Cloudinary
+                cloudinary.uploader.destroy(public_id, resource_type="image")
+                print(f"🗑️ Deleted auto-dataset entry: {public_id}")
+                
+                # Check and cleanup empty folder
+                if folder_to_check:
+                    cleanup_empty_cloudinary_folder(folder_to_check)
+                
+                return {"status": "success"}
+        
+        return {"status": "error", "message": "Entry not found"}
+    except Exception as e:
+        print(f"⚠️ Failed to delete auto-dataset entry: {e}")
+        return {"status": "error", "message": str(e)}

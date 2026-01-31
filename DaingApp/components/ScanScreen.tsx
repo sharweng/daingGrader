@@ -97,38 +97,40 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
             style={styles.previewImage}
             resizeMode="contain"
           />
-
-          {loading && (
-            <View style={styles.analysisOverlay}>
-              <View style={styles.analysisCard}>
-                <ActivityIndicator size="large" color={theme.colors.primary} />
-                <Text style={styles.analysisText}>Analyzing...</Text>
-                <Text style={styles.analysisSubtext}>
-                  AI is detecting fish quality
-                </Text>
-              </View>
-            </View>
-          )}
         </View>
 
-        {!loading && (
-          <View style={commonStyles.bottomButtonBar}>
-            <TouchableOpacity
-              style={[commonStyles.bottomButton, styles.secondaryButton]}
-              onPress={onReset}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="refresh" size={20} color={theme.colors.text} />
-              <Text style={commonStyles.bottomButtonText}>Retake</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[commonStyles.bottomButton, styles.successButton]}
-              onPress={onAnalyze}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="checkmark-circle" size={20} color="#fff" />
-              <Text style={commonStyles.bottomButtonText}>Analyze</Text>
-            </TouchableOpacity>
+        <View
+          style={[commonStyles.bottomButtonBar, loading && { opacity: 0 }]}
+          pointerEvents={loading ? "none" : "auto"}
+        >
+          <TouchableOpacity
+            style={[commonStyles.bottomButton, styles.secondaryButton]}
+            onPress={onReset}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="refresh" size={20} color={theme.colors.text} />
+            <Text style={commonStyles.bottomButtonText}>Retake</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[commonStyles.bottomButton, styles.successButton]}
+            onPress={onAnalyze}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="checkmark-circle" size={20} color="#fff" />
+            <Text style={commonStyles.bottomButtonText}>Analyze</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Full screen loading overlay */}
+        {loading && (
+          <View style={styles.fullScreenOverlay}>
+            <View style={styles.analysisCard}>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+              <Text style={styles.analysisText}>Analyzing...</Text>
+              <Text style={styles.analysisSubtext}>
+                AI is detecting fish quality
+              </Text>
+            </View>
           </View>
         )}
       </View>
@@ -349,6 +351,18 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.7)",
     justifyContent: "center",
     alignItems: "center",
+  },
+
+  fullScreenOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 100,
   },
 
   analysisCard: {
