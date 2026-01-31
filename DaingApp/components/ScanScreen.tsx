@@ -19,6 +19,7 @@ interface ScanScreenProps {
   latestHistoryImage: string | null;
   onNavigate: (screen: Screen) => void;
   onTakePicture: () => void;
+  onPickImage: () => void;
   onAnalyze: () => void;
   onReset: () => void;
   onViewHistoryImage: () => void;
@@ -32,6 +33,7 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
   latestHistoryImage,
   onNavigate,
   onTakePicture,
+  onPickImage,
   onAnalyze,
   onReset,
   onViewHistoryImage,
@@ -164,6 +166,23 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
               onPress={onTakePicture}
             >
               <View style={commonStyles.innerButton} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onPickImage}
+              style={{
+                position: "absolute",
+                right: 60,
+                width: 60,
+                height: 60,
+                borderRadius: 30,
+                backgroundColor: "rgba(255, 255, 255, 0.9)",
+                justifyContent: "center",
+                alignItems: "center",
+                borderWidth: 2,
+                borderColor: "white",
+              }}
+            >
+              <Ionicons name="images" size={32} color="#3b82f6" />
             </TouchableOpacity>
           </View>
         </View>

@@ -82,9 +82,82 @@ async def analyze_fish(file: UploadFile = File(...)):
   # This replaces the manual cv2.rectangle code
   results = model(img)
   
-  # 3. DRAW BOXES & LABELS
-  # plot() automatically draws the boxes, names, and confidence scores
-  annotated_img = results[0].plot() 
+  # 3. FILTER DETECTIONS BY CONFIDENCE THRESHOLD
+  # Set a minimum confidence threshold to avoid false positives
+  CONFIDENCE_THRESHOLD = 0.8  # Only accept detections with 50% confidence or higher
+  
+  # Get the detection boxes from results
+  boxes = results[0].boxes
+  
+  # Filter detections based on confidence
+  if boxes is not None and len(boxes) > 0:
+    # Get confidence scores
+    confidences = boxes.conf.cpu().numpy()
+    # Check if any detection meets the threshold
+    high_conf_detections = confidences >= CONFIDENCE_THRESHOLD
+    
+    if not high_conf_detections.any():
+      # NO DAING DETECTED - Add text overlay
+      annotated_img = img.copy()
+      h, w = annotated_img.shape[:2]
+      
+      # Add semi-transparent overlay
+      overlay = annotated_img.copy()
+      cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
+      cv2.addWeighted(overlay, 0.3, annotated_img, 0.7, 0, annotated_img)
+      
+      # Add "NO DAING DETECTED" text in the center
+      text = "NO DAING DETECTED"
+      font = cv2.FONT_HERSHEY_SIMPLEX
+      font_scale = 1.5
+      thickness = 3
+      
+      # Get text size for centering
+      (text_w, text_h), _ = cv2.getTextSize(text, font, font_scale, thickness)
+      text_x = (w - text_w) // 2
+      text_y = (h + text_h) // 2
+      
+      # Draw text with outline for better visibility
+      cv2.putText(annotated_img, text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness + 2)
+      cv2.putText(annotated_img, text, (text_x, text_y), font, font_scale, (255, 255, 255), thickness)
+      
+      print("⚠️ No high-confidence daing detected")
+    else:
+      # DAING DETECTED - Filter and draw only high-confidence boxes
+      # Create a mask for high confidence detections
+      indices = [i for i, conf in enumerate(confidences) if conf >= CONFIDENCE_THRESHOLD]
+      
+      # Filter the results to only include high-confidence detections
+      filtered_boxes = boxes[indices]
+      results[0].boxes = filtered_boxes
+      
+      # Draw boxes and labels for filtered detections
+      annotated_img = results[0].plot()
+      print(f"✅ Found {len(indices)} high-confidence daing detection(s)")
+  else:
+    # No detections at all
+    annotated_img = img.copy()
+    h, w = annotated_img.shape[:2]
+    
+    # Add semi-transparent overlay
+    overlay = annotated_img.copy()
+    cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.3, annotated_img, 0.7, 0, annotated_img)
+    
+    # Add "NO DAING DETECTED" text
+    text = "NO DAING DETECTED"
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 1.5
+    thickness = 3
+    
+    (text_w, text_h), _ = cv2.getTextSize(text, font, font_scale, thickness)
+    text_x = (w - text_w) // 2
+    text_y = (h + text_h) // 2
+    
+    cv2.putText(annotated_img, text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness + 2)
+    cv2.putText(annotated_img, text, (text_x, text_y), font, font_scale, (255, 255, 255), thickness)
+    
+    print("⚠️ No daing detected at all")
 
   # 4. PREPARE RESPONSE
   success, encoded_img = cv2.imencode('.jpg', annotated_img)

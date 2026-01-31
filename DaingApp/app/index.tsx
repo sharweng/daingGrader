@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { View, Button, Alert } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as ImagePicker from "expo-image-picker";
 import { commonStyles } from "../styles/common";
 import { HomeScreen } from "../components/HomeScreen";
 import { ScanScreen } from "../components/ScanScreen";
@@ -71,6 +72,23 @@ export default function Index() {
     const uri = await takePicture(cameraRef);
     if (uri) {
       setCapturedImage(uri);
+    }
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setCapturedImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      Alert.alert("Error", "Failed to pick image from gallery");
     }
   };
 
@@ -212,6 +230,7 @@ export default function Index() {
       latestHistoryImage={latestHistoryEntry?.url || null}
       onNavigate={setCurrentScreen}
       onTakePicture={handleTakePicture}
+      onPickImage={handlePickImage}
       onAnalyze={handleAnalyzeFish}
       onReset={handleReset}
       onViewHistoryImage={handleViewHistoryImage}
