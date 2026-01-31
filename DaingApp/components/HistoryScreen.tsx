@@ -16,9 +16,10 @@ import {
   ScrollView,
   Dimensions,
   FlatList,
+  StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { commonStyles } from "../styles/common";
+import { commonStyles, theme } from "../styles/common";
 import { historyStyles } from "../styles/history";
 import type { Screen, HistoryEntry } from "../types";
 import { fetchHistory, deleteHistoryEntry } from "../services/api";
@@ -221,7 +222,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
     setSelectedIds((prev) => {
       const newSet = new Set(prev);
       const allSelected = dateEntries.every((entry) => newSet.has(entry.id));
-      
+
       if (allSelected) {
         // Deselect all in this date
         dateEntries.forEach((entry) => newSet.delete(entry.id));
@@ -229,7 +230,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
         // Select all in this date
         dateEntries.forEach((entry) => newSet.add(entry.id));
       }
-      
+
       // Exit selection mode if no items selected
       if (newSet.size === 0) {
         setIsSelectionMode(false);
@@ -238,9 +239,12 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
     });
   }, []);
 
-  const isAllSelectedInDate = useCallback((dateEntries: HistoryEntry[]) => {
-    return dateEntries.every((entry) => selectedIds.has(entry.id));
-  }, [selectedIds]);
+  const isAllSelectedInDate = useCallback(
+    (dateEntries: HistoryEntry[]) => {
+      return dateEntries.every((entry) => selectedIds.has(entry.id));
+    },
+    [selectedIds],
+  );
 
   const getCurrentIndex = useCallback(() => {
     if (!selectedEntry) return -1;
@@ -263,11 +267,12 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
           width: screenWidth,
           justifyContent: "center",
           alignItems: "center",
+          backgroundColor: theme.colors.background,
         }}
       >
         <Image
           source={{ uri: item.url }}
-          style={commonStyles.previewImage}
+          style={{ width: "100%", flex: 1 }}
           resizeMode="contain"
         />
       </View>
@@ -276,12 +281,18 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
     return (
       <View style={commonStyles.container}>
         <View style={commonStyles.screenHeader}>
-          <TouchableOpacity onPress={() => setSelectedEntry(null)}>
-            <Ionicons name="arrow-back" size={28} color="white" />
+          <TouchableOpacity 
+            style={styles.headerButton}
+            onPress={() => setSelectedEntry(null)}
+          >
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
           <Text style={commonStyles.screenTitle}>{formattedTimestamp}</Text>
-          <TouchableOpacity onPress={() => confirmDelete(selectedEntry)}>
-            <Ionicons name="trash" size={24} color="#f87171" />
+          <TouchableOpacity 
+            style={styles.headerButton}
+            onPress={() => confirmDelete(selectedEntry)}
+          >
+            <Ionicons name="trash-outline" size={22} color={theme.colors.error} />
           </TouchableOpacity>
         </View>
 
@@ -311,16 +322,18 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
 
         <View style={commonStyles.bottomButtonBar}>
           <TouchableOpacity
-            style={[commonStyles.bottomButton, { backgroundColor: "#1f2a44" }]}
+            style={[commonStyles.bottomButton, styles.secondaryButton]}
             onPress={() => setSelectedEntry(null)}
           >
+            <Ionicons name="close" size={20} color={theme.colors.text} />
             <Text style={commonStyles.bottomButtonText}>Close</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[commonStyles.bottomButton, { backgroundColor: "#dc2626" }]}
+            style={[commonStyles.bottomButton, styles.dangerButton]}
             onPress={() => confirmDelete(selectedEntry)}
             disabled={isDeleting}
           >
+            <Ionicons name="trash-outline" size={20} color={theme.colors.text} />
             <Text style={commonStyles.bottomButtonText}>Delete</Text>
           </TouchableOpacity>
         </View>
@@ -332,78 +345,70 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
     <View style={commonStyles.container}>
       {/* Deletion Loading Overlay */}
       {isDeleting && (
-        <View style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000,
-        }}>
-          <ActivityIndicator size="large" color="#3b82f6" />
-          <Text style={{ color: '#fff', marginTop: 16, fontSize: 16 }}>
-            Deleting {selectedIds.size > 0 ? `${selectedIds.size} photo${selectedIds.size > 1 ? 's' : ''}` : 'photo'}...
-          </Text>
+        <View style={historyStyles.deletionOverlay}>
+          <View style={historyStyles.deletionCard}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={historyStyles.deletionText}>
+              Deleting{" "}
+              {selectedIds.size > 0
+                ? `${selectedIds.size} photo${selectedIds.size > 1 ? "s" : ""}`
+                : "photo"}
+              ...
+            </Text>
+          </View>
         </View>
       )}
 
       <View style={commonStyles.screenHeader}>
         {isSelectionMode ? (
           <>
-            <TouchableOpacity onPress={cancelSelection}>
-              <Ionicons name="close" size={28} color="white" />
+            <TouchableOpacity style={styles.headerButton} onPress={cancelSelection}>
+              <Ionicons name="close" size={24} color={theme.colors.text} />
             </TouchableOpacity>
             <Text style={commonStyles.screenTitle}>
               {selectedIds.size} selected
             </Text>
-            <TouchableOpacity onPress={handleBatchDelete} disabled={isDeleting}>
-              <Ionicons name="trash" size={24} color="#f87171" />
+            <TouchableOpacity 
+              style={styles.headerButton} 
+              onPress={handleBatchDelete} 
+              disabled={isDeleting}
+            >
+              <Ionicons name="trash-outline" size={22} color={theme.colors.error} />
             </TouchableOpacity>
           </>
         ) : (
           <>
-            <TouchableOpacity onPress={() => onNavigate("home")}>
-              <Ionicons name="arrow-back" size={28} color="white" />
+            <TouchableOpacity style={styles.headerButton} onPress={() => onNavigate("home")}>
+              <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
             </TouchableOpacity>
             <Text style={commonStyles.screenTitle}>History</Text>
-            <View style={{ width: 28 }} />
+            <View style={{ width: 40 }} />
           </>
         )}
       </View>
 
       <View style={historyStyles.contentWrapper}>
         {loading && entries.length === 0 ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color="#3b82f6" />
-            <Text style={{ color: '#888', marginTop: 16, fontSize: 16 }}>Loading History...</Text>
+          <View style={historyStyles.loadingCenter}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={historyStyles.loadingText}>Loading History...</Text>
           </View>
         ) : showEmpty ? (
           <View style={historyStyles.emptyStateWrapper}>
-            <Ionicons name="time-outline" size={72} color="#334155" />
+            <View style={historyStyles.emptyIcon}>
+              <Ionicons name="time-outline" size={48} color={theme.colors.textMuted} />
+            </View>
             <Text style={historyStyles.emptyTitle}>No scans yet</Text>
             <Text style={historyStyles.emptySubtitle}>
               Scan fish to see your previous analyses here.
             </Text>
             <TouchableOpacity
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                backgroundColor: "#3b82f6",
-                paddingHorizontal: 20,
-                paddingVertical: 12,
-                borderRadius: 8,
-                marginTop: 24,
-                gap: 8,
-              }}
+              style={commonStyles.refreshButton}
               onPress={loadHistory}
+              activeOpacity={0.8}
             >
-              <Ionicons name="refresh" size={20} color="#fff" />
-              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
-                Refresh
-              </Text>
+              <Ionicons name="refresh" size={20} color={theme.colors.text} />
+              <Text style={commonStyles.refreshButtonText}>Refresh</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -416,109 +421,130 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
             {sections.map((section) => {
               // Get all entries for this date section
               const allEntriesInSection = section.rows.flat();
-              const allSelectedInSection = isAllSelectedInDate(allEntriesInSection);
-              
+              const allSelectedInSection =
+                isAllSelectedInDate(allEntriesInSection);
+
               return (
-              <View key={section.isoDate} style={historyStyles.dateSection}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <Text style={historyStyles.dateHeader}>
-                    {section.formattedDate}
-                  </Text>
-                  {isSelectionMode && (
-                    <TouchableOpacity
-                      onPress={() => handleSelectAllInDate(allEntriesInSection)}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        backgroundColor: allSelectedInSection ? "#3b82f6" : "rgba(59, 130, 246, 0.2)",
-                        paddingHorizontal: 12,
-                        paddingVertical: 6,
-                        borderRadius: 16,
-                        gap: 4,
-                      }}
-                    >
-                      <Ionicons
-                        name={allSelectedInSection ? "checkmark-circle" : "ellipse-outline"}
-                        size={16}
-                        color={allSelectedInSection ? "#fff" : "#3b82f6"}
-                      />
-                      <Text style={{ color: allSelectedInSection ? "#fff" : "#3b82f6", fontSize: 12, fontWeight: "600" }}>
-                        {allSelectedInSection ? "Deselect All" : "Select All"}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-                {section.rows.map((row, rowIndex) => (
-                  <View
-                    key={`${section.isoDate}-row-${rowIndex}`}
-                    style={historyStyles.gridRow}
-                  >
-                    {row.map((entry, index) => {
-                      const isSelected = selectedIds.has(entry.id);
-                      return (
-                        <TouchableOpacity
-                          key={entry.id}
-                          style={[
-                            historyStyles.square,
-                            { width: photoSize, height: photoSize },
-                          ]}
-                          onPress={() => handleImagePress(entry)}
-                          onLongPress={() => handleLongPress(entry)}
-                          delayLongPress={500}
-                          activeOpacity={0.8}
-                        >
-                          <Image
-                            source={{ uri: entry.url }}
-                            style={historyStyles.squareImage}
-                          />
-                          {isSelectionMode && (
-                            <View
-                              style={{
-                                position: "absolute",
-                                top: 8,
-                                right: 8,
-                                width: 24,
-                                height: 24,
-                                borderRadius: 12,
-                                backgroundColor: isSelected
-                                  ? "#3b82f6"
-                                  : "rgba(255,255,255,0.3)",
-                                borderWidth: 2,
-                                borderColor: "white",
-                                justifyContent: "center",
-                                alignItems: "center",
-                              }}
-                            >
-                              {isSelected && (
-                                <Ionicons
-                                  name="checkmark"
-                                  size={16}
-                                  color="white"
-                                />
-                              )}
-                            </View>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                    {row.length < 3 &&
-                      Array.from({ length: 3 - row.length }).map((_, idx) => (
-                        <View
-                          key={`spacer-${idx}`}
-                          style={[
-                            historyStyles.square,
-                            historyStyles.squareSpacer,
-                            { width: photoSize, height: photoSize },
-                          ]}
+                <View key={section.isoDate} style={historyStyles.dateSection}>
+                  <View style={historyStyles.dateSectionHeader}>
+                    <Text style={historyStyles.dateHeader}>
+                      {section.formattedDate}
+                    </Text>
+                    {isSelectionMode && (
+                      <TouchableOpacity
+                        onPress={() =>
+                          handleSelectAllInDate(allEntriesInSection)
+                        }
+                        style={[
+                          historyStyles.selectAllButton,
+                          !allSelectedInSection && historyStyles.selectAllButtonInactive,
+                        ]}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name={
+                            allSelectedInSection
+                              ? "checkmark-circle"
+                              : "ellipse-outline"
+                          }
+                          size={16}
+                          color={allSelectedInSection ? theme.colors.text : theme.colors.primary}
                         />
-                      ))}
+                        <Text
+                          style={[
+                            historyStyles.selectAllText,
+                            !allSelectedInSection && historyStyles.selectAllTextInactive,
+                          ]}
+                        >
+                          {allSelectedInSection ? "Deselect" : "Select All"}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
-                ))}
-              </View>
-            );})}
+                  {section.rows.map((row, rowIndex) => (
+                    <View
+                      key={`${section.isoDate}-row-${rowIndex}`}
+                      style={historyStyles.gridRow}
+                    >
+                      {row.map((entry) => {
+                        const isSelected = selectedIds.has(entry.id);
+                        return (
+                          <TouchableOpacity
+                            key={entry.id}
+                            style={[
+                              historyStyles.square,
+                              { width: photoSize, height: photoSize },
+                            ]}
+                            onPress={() => handleImagePress(entry)}
+                            onLongPress={() => handleLongPress(entry)}
+                            delayLongPress={400}
+                            activeOpacity={0.85}
+                          >
+                            <Image
+                              source={{ uri: entry.url }}
+                              style={historyStyles.squareImage}
+                            />
+                            {isSelectionMode && (
+                              <View
+                                style={[
+                                  historyStyles.selectionCheckbox,
+                                  isSelected && historyStyles.selectionCheckboxActive,
+                                ]}
+                              >
+                                {isSelected && (
+                                  <Ionicons
+                                    name="checkmark"
+                                    size={16}
+                                    color={theme.colors.text}
+                                  />
+                                )}
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                      {row.length < 3 &&
+                        Array.from({ length: 3 - row.length }).map((_, idx) => (
+                          <View
+                            key={`spacer-${idx}`}
+                            style={[
+                              historyStyles.square,
+                              historyStyles.squareSpacer,
+                              { width: photoSize, height: photoSize },
+                            ]}
+                          />
+                        ))}
+                    </View>
+                  ))}
+                </View>
+              );
+            })}
           </ScrollView>
         )}
       </View>
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  headerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.backgroundLight,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  secondaryButton: {
+    backgroundColor: theme.colors.backgroundLight,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    flexDirection: "row",
+    gap: 8,
+  },
+  dangerButton: {
+    backgroundColor: theme.colors.error,
+    flexDirection: "row",
+    gap: 8,
+  },
+});

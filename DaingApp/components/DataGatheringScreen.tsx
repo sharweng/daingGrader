@@ -86,7 +86,7 @@ export const DataGatheringScreen: React.FC<DataGatheringScreenProps> = ({
           {loading ? (
             <ActivityIndicator
               size="large"
-              color="#00ff00"
+              color="#3B82F6"
               style={{ position: "absolute" }}
             />
           ) : (
@@ -94,19 +94,21 @@ export const DataGatheringScreen: React.FC<DataGatheringScreenProps> = ({
               <TouchableOpacity
                 style={[
                   commonStyles.bottomButton,
-                  { backgroundColor: "#dc2626" },
+                  { backgroundColor: "#EF4444" },
                 ]}
                 onPress={onReset}
               >
+                <Ionicons name="refresh-outline" size={20} color="white" style={{ marginRight: 6 }} />
                 <Text style={commonStyles.bottomButtonText}>Retake</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
                   commonStyles.bottomButton,
-                  { backgroundColor: "#16a34a" },
+                  { backgroundColor: "#10B981" },
                 ]}
                 onPress={onUpload}
               >
+                <Ionicons name="cloud-upload-outline" size={20} color="white" style={{ marginRight: 6 }} />
                 <Text style={commonStyles.bottomButtonText}>Save</Text>
               </TouchableOpacity>
             </View>

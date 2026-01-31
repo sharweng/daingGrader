@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { commonStyles } from "../styles/common";
+import { commonStyles, theme } from "../styles/common";
 import { fetchAnalytics } from "../services/api";
 import type { Screen, AnalyticsSummary } from "../types";
 
@@ -93,14 +93,14 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
     return (
       <View style={commonStyles.container}>
         <View style={commonStyles.screenHeader}>
-          <TouchableOpacity onPress={() => onNavigate("home")}>
-            <Ionicons name="arrow-back" size={28} color="white" />
+          <TouchableOpacity style={styles.headerButton} onPress={() => onNavigate("home")}>
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
           <Text style={commonStyles.screenTitle}>Analytics</Text>
-          <View style={{ width: 28 }} />
+          <View style={{ width: 40 }} />
         </View>
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color="#3b82f6" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={styles.loadingText}>Loading Analytics...</Text>
         </View>
       </View>
@@ -111,24 +111,27 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
     return (
       <View style={commonStyles.container}>
         <View style={commonStyles.screenHeader}>
-          <TouchableOpacity onPress={() => onNavigate("home")}>
-            <Ionicons name="arrow-back" size={28} color="white" />
+          <TouchableOpacity style={styles.headerButton} onPress={() => onNavigate("home")}>
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
           <Text style={commonStyles.screenTitle}>Analytics</Text>
-          <View style={{ width: 28 }} />
+          <View style={{ width: 40 }} />
         </View>
         <View style={styles.centerContent}>
-          <Ionicons name="bar-chart-outline" size={80} color="#666" />
+          <View style={styles.emptyIcon}>
+            <Ionicons name="bar-chart-outline" size={48} color={theme.colors.textMuted} />
+          </View>
           <Text style={styles.emptyText}>No Scan Data Yet</Text>
           <Text style={styles.emptySubtext}>
             Start scanning fish to see analytics here
           </Text>
           <TouchableOpacity
-            style={styles.refreshButton}
+            style={commonStyles.refreshButton}
             onPress={loadAnalytics}
+            activeOpacity={0.8}
           >
-            <Ionicons name="refresh" size={20} color="#fff" />
-            <Text style={styles.refreshButtonText}>Refresh</Text>
+            <Ionicons name="refresh" size={20} color={theme.colors.text} />
+            <Text style={commonStyles.refreshButtonText}>Refresh</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -142,12 +145,12 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
   return (
     <View style={commonStyles.container}>
       <View style={commonStyles.screenHeader}>
-        <TouchableOpacity onPress={() => onNavigate("home")}>
-          <Ionicons name="arrow-back" size={28} color="white" />
+        <TouchableOpacity style={styles.headerButton} onPress={() => onNavigate("home")}>
+          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={commonStyles.screenTitle}>Analytics</Text>
-        <TouchableOpacity onPress={onRefresh}>
-          <Ionicons name="refresh" size={24} color="white" />
+        <TouchableOpacity style={styles.headerButton} onPress={onRefresh}>
+          <Ionicons name="refresh" size={22} color={theme.colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -160,14 +163,17 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
         {/* Summary Cards */}
         <View style={styles.summaryContainer}>
           <View style={[styles.summaryCard, styles.totalCard]}>
+            <Ionicons name="scan-outline" size={24} color="rgba(255,255,255,0.7)" style={styles.summaryIcon} />
             <Text style={styles.summaryNumber}>{analytics.total_scans}</Text>
             <Text style={styles.summaryLabel}>Total Scans</Text>
           </View>
           <View style={[styles.summaryCard, styles.successCard]}>
+            <Ionicons name="fish-outline" size={24} color="rgba(255,255,255,0.7)" style={styles.summaryIcon} />
             <Text style={styles.summaryNumber}>{analytics.daing_scans}</Text>
             <Text style={styles.summaryLabel}>Daing</Text>
           </View>
           <View style={[styles.summaryCard, styles.errorCard]}>
+            <Ionicons name="close-circle-outline" size={24} color="rgba(255,255,255,0.7)" style={styles.summaryIcon} />
             <Text style={styles.summaryNumber}>
               {analytics.non_daing_scans}
             </Text>
@@ -326,6 +332,14 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
 };
 
 const styles = StyleSheet.create({
+  headerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.backgroundLight,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   scrollView: {
     flex: 1,
   },
@@ -338,34 +352,28 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: "#888",
+    color: theme.colors.textSecondary,
+  },
+  emptyIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: theme.colors.backgroundLight,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 24,
   },
   emptyText: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "600",
-    color: "#666",
-    marginTop: 16,
+    color: theme.colors.text,
+    marginBottom: 8,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: "#888",
-    marginTop: 8,
+    fontSize: 15,
+    color: theme.colors.textSecondary,
     textAlign: "center",
-  },
-  refreshButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#3b82f6",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 24,
-    gap: 8,
-  },
-  refreshButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
+    lineHeight: 22,
   },
   summaryContainer: {
     flexDirection: "row",
@@ -378,37 +386,49 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: "center",
   },
+  summaryIcon: {
+    marginBottom: 8,
+  },
   totalCard: {
-    backgroundColor: "#1E3A5F",
+    backgroundColor: theme.colors.primary + "30",
+    borderWidth: 1,
+    borderColor: theme.colors.primary + "50",
   },
   successCard: {
-    backgroundColor: "#1B4332",
+    backgroundColor: theme.colors.success + "30",
+    borderWidth: 1,
+    borderColor: theme.colors.success + "50",
   },
   errorCard: {
-    backgroundColor: "#5C1A1A",
+    backgroundColor: theme.colors.error + "30",
+    borderWidth: 1,
+    borderColor: theme.colors.error + "50",
   },
   summaryNumber: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: "bold",
-    color: "#fff",
+    color: theme.colors.text,
   },
   summaryLabel: {
-    fontSize: 12,
-    color: "#AAA",
+    fontSize: 11,
+    color: theme.colors.textSecondary,
     marginTop: 4,
     textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   chartContainer: {
-    backgroundColor: "#1A1A2E",
+    backgroundColor: theme.colors.backgroundLight,
     margin: 16,
     marginTop: 0,
     borderRadius: 16,
     padding: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   chartTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
-    color: "#fff",
+    color: theme.colors.text,
     marginBottom: 16,
   },
   pieChartContainer: {

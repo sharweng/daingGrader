@@ -17,77 +17,83 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 }) => {
   return (
     <View style={homeStyles.homeContainer}>
-      {/* HEADER WITH SETTINGS */}
+      {/* HEADER */}
       <View style={homeStyles.header}>
-        <View style={{ width: 28 }} />
+        <View style={{ width: 44 }} />
         <Text style={homeStyles.appTitle}>DaingGrader</Text>
         <TouchableOpacity
           style={homeStyles.settingsButton}
           onPress={onOpenSettings}
         >
-          <Ionicons name="settings-outline" size={28} color="white" />
+          <Ionicons name="settings-outline" size={24} color="#94A3B8" />
         </TouchableOpacity>
       </View>
 
       {/* HERO SECTION */}
       <View style={homeStyles.heroSection}>
-        {/* HERO BUTTON - SCAN */}
         <TouchableOpacity
           style={homeStyles.heroButton}
           onPress={() => onNavigate("scan")}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
           <View style={homeStyles.heroButtonInner}>
-            <Ionicons name="camera" size={80} color="#fff" />
+            <Ionicons name="scan" size={64} color="#fff" />
             <Text style={homeStyles.heroButtonText}>SCAN</Text>
             <Text style={homeStyles.heroButtonSubtext}>Analyze Dried Fish</Text>
           </View>
         </TouchableOpacity>
+        <Text style={homeStyles.tagline}>
+          AI-powered dried fish quality detection
+        </Text>
       </View>
 
-      {/* SECONDARY BUTTONS - Match Preview Style */}
+      {/* NAVIGATION GRID */}
       <View style={homeStyles.buttonGrid}>
         <View style={homeStyles.buttonRow}>
           <TouchableOpacity
             style={homeStyles.gridButton}
             onPress={() => onNavigate("history")}
+            activeOpacity={0.7}
           >
+            <Ionicons name="time-outline" size={22} color="#94A3B8" />
             <Text style={homeStyles.gridButtonText}>History</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={homeStyles.gridButton}
             onPress={() => onNavigate("analytics")}
+            activeOpacity={0.7}
           >
+            <Ionicons name="stats-chart-outline" size={22} color="#94A3B8" />
             <Text style={homeStyles.gridButtonText}>Analytics</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={homeStyles.buttonRow}>
-          <TouchableOpacity
-            style={[
-              homeStyles.gridButton,
-              homeStyles.devButton,
-              !devMode && homeStyles.hiddenButton,
-            ]}
-            onPress={() => devMode && onNavigate("dataGathering")}
-            disabled={!devMode}
-          >
-            <Text style={homeStyles.gridButtonText}>Data Gathering</Text>
-          </TouchableOpacity>
+        {devMode && (
+          <View style={homeStyles.buttonRow}>
+            <TouchableOpacity
+              style={[homeStyles.gridButton, homeStyles.devButton]}
+              onPress={() => onNavigate("dataGathering")}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="camera-outline" size={22} color="#A78BFA" />
+              <Text style={[homeStyles.gridButtonText, homeStyles.devButtonText]}>
+                Data Gathering
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[
-              homeStyles.gridButton,
-              homeStyles.devButton,
-              !devMode && homeStyles.hiddenButton,
-            ]}
-            onPress={() => devMode && onNavigate("dataset")}
-            disabled={!devMode}
-          >
-            <Text style={homeStyles.gridButtonText}>Dataset</Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={[homeStyles.gridButton, homeStyles.devButton]}
+              onPress={() => onNavigate("dataset")}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="folder-outline" size={22} color="#A78BFA" />
+              <Text style={[homeStyles.gridButtonText, homeStyles.devButtonText]}>
+                Dataset
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </View>
   );

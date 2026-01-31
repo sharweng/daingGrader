@@ -1,81 +1,124 @@
 import { StyleSheet } from "react-native";
 
+const theme = {
+  colors: {
+    primary: '#3B82F6',
+    background: '#0F172A',
+    backgroundLight: '#1E293B',
+    text: '#FFFFFF',
+    textSecondary: '#94A3B8',
+    border: '#334155',
+  },
+  borderRadius: {
+    md: 12,
+    lg: 16,
+    xl: 24,
+  },
+};
+
 export const modalStyles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.7)",
     justifyContent: "flex-end",
   },
+  
   modalContent: {
-    backgroundColor: "#1e293b",
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    padding: 30,
-    minHeight: 300,
+    backgroundColor: theme.colors.backgroundLight,
+    borderTopLeftRadius: theme.borderRadius.xl,
+    borderTopRightRadius: theme.borderRadius.xl,
+    padding: 24,
+    paddingBottom: 40,
   },
+  
+  modalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: theme.colors.border,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 24,
+  },
+  
   modalTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "white",
-    marginBottom: 30,
+    fontSize: 22,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: 24,
   },
+  
+  inputSection: {
+    marginBottom: 20,
+  },
+  
+  inputLabel: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    marginBottom: 8,
+    fontWeight: "500",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  
+  input: {
+    backgroundColor: theme.colors.background,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: theme.colors.text,
+  },
+  
   settingRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 15,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
   },
+  
   settingText: {
-    fontSize: 18,
-    color: "white",
+    fontSize: 16,
+    color: theme.colors.text,
+    fontWeight: "500",
   },
+  
   checkbox: {
     width: 28,
     height: 28,
-    borderRadius: 6,
+    borderRadius: 8,
     borderWidth: 2,
-    borderColor: "#666",
+    borderColor: theme.colors.border,
     justifyContent: "center",
     alignItems: "center",
   },
+  
   checkboxActive: {
-    backgroundColor: "#3b82f6",
-    borderColor: "#3b82f6",
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
+  
   settingDescription: {
     fontSize: 13,
-    color: "#94a3b8",
-    marginTop: 5,
-    marginBottom: 20,
+    color: theme.colors.textSecondary,
+    marginTop: 8,
+    marginBottom: 16,
+    lineHeight: 18,
   },
-  inputSection: {
-    marginTop: 10,
-  },
-  inputLabel: {
-    fontSize: 16,
-    color: "white",
-    marginBottom: 8,
-    fontWeight: "500",
-  },
-  input: {
-    backgroundColor: "#0f172a",
-    borderWidth: 1,
-    borderColor: "#334155",
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: "white",
-  },
+  
   closeButton: {
-    backgroundColor: "#3b82f6",
-    paddingVertical: 15,
-    borderRadius: 10,
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 16,
+    borderRadius: theme.borderRadius.md,
     alignItems: "center",
-    marginTop: 20,
+    marginTop: 16,
   },
+  
   closeButtonText: {
-    color: "white",
+    color: theme.colors.text,
     fontSize: 16,
     fontWeight: "600",
   },

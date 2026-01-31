@@ -28,7 +28,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       onRequestClose={onClose}
     >
       <View style={modalStyles.modalOverlay}>
+        <TouchableOpacity 
+          style={{ flex: 1 }} 
+          activeOpacity={1} 
+          onPress={onClose} 
+        />
         <View style={modalStyles.modalContent}>
+          <View style={modalStyles.modalHandle} />
           <Text style={modalStyles.modalTitle}>Settings</Text>
 
           <View style={modalStyles.inputSection}>
@@ -43,10 +49,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               autoCorrect={false}
               keyboardType="url"
             />
-            <Text style={modalStyles.settingDescription}>
-              Enter your backend server address (e.g., http://192.168.1.5:8000)
-            </Text>
           </View>
+
+          <Text style={modalStyles.settingDescription}>
+            Enter your backend server address (e.g., http://192.168.1.5:8000)
+          </Text>
 
           <TouchableOpacity
             style={modalStyles.settingRow}
@@ -59,7 +66,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 devMode && modalStyles.checkboxActive,
               ]}
             >
-              {devMode && <Ionicons name="checkmark" size={20} color="white" />}
+              {devMode && <Ionicons name="checkmark" size={18} color="white" />}
             </View>
           </TouchableOpacity>
 
@@ -68,7 +75,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </Text>
 
           <TouchableOpacity style={modalStyles.closeButton} onPress={onClose}>
-            <Text style={modalStyles.closeButtonText}>Close</Text>
+            <Text style={modalStyles.closeButtonText}>Done</Text>
           </TouchableOpacity>
         </View>
       </View>
