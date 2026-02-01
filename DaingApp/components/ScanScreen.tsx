@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -6,15 +6,11 @@ import {
   Image,
   ActivityIndicator,
   StyleSheet,
-  ScrollView,
-  Dimensions,
 } from "react-native";
 import { CameraView } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
 import { commonStyles, theme } from "../styles/common";
 import type { Screen, AnalysisScanResult } from "../types";
-
-const { width: screenWidth } = Dimensions.get("window");
 
 interface ScanScreenProps {
   cameraRef: React.RefObject<CameraView | null>;
@@ -43,28 +39,8 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
   onReset,
   onViewHistoryImage,
 }) => {
-  const [currentPage, setCurrentPage] = useState(0);
-  const scrollViewRef = useRef<ScrollView>(null);
-
-  const handleScroll = (event: any) => {
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const page = Math.round(offsetX / screenWidth);
-    setCurrentPage(page);
-  };
-
   // SCENARIO A: SHOW RESULT FROM SERVER
   if (analysisResult) {
-    // Build array of images, filtering out null analysis_image
-    const allImages: Array<{ uri: string; label: string }> = [
-      { uri: analysisResult.detection_image, label: "Detection" },
-    ];
-    if (analysisResult.analysis_image) {
-      allImages.push({
-        uri: analysisResult.analysis_image,
-        label: "Color Analysis",
-      });
-    }
-
     return (
       <View style={commonStyles.container}>
         <View style={commonStyles.screenHeader}>
@@ -81,87 +57,14 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
           <View style={{ width: 40 }} />
         </View>
 
-        {/* Swipeable Image Gallery */}
+        {/* Single Result Image */}
         <View style={styles.resultContainer}>
-          <ScrollView
-            ref={scrollViewRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-            style={styles.imageScrollView}
-          >
-            {allImages.map((image, index) => (
-              <View key={index} style={styles.imageSlide}>
-                <Image
-                  source={{ uri: image.uri }}
-                  style={styles.resultImage}
-                  resizeMode="contain"
-                />
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* Page Indicator */}
-          <View style={styles.pageIndicatorContainer}>
-            <View style={styles.pageIndicator}>
-              {allImages.map((image, index) => (
-                <TouchableOpacity
-                  key={index}
-                  onPress={() => {
-                    scrollViewRef.current?.scrollTo({
-                      x: index * screenWidth,
-                      animated: true,
-                    });
-                  }}
-                  style={styles.dotTouchable}
-                >
-                  <View
-                    style={[
-                      styles.dot,
-                      currentPage === index && styles.dotActive,
-                    ]}
-                  />
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={styles.pageLabel}>
-              {allImages[currentPage]?.label || ""}
-            </Text>
-          </View>
+          <Image
+            source={{ uri: analysisResult.result_image }}
+            style={styles.resultImage}
+            resizeMode="contain"
+          />
         </View>
-
-        {/* Color Analysis Info Card */}
-        {analysisResult.color_analysis && (
-          <View style={styles.analysisInfoCard}>
-            <View style={styles.analysisInfoRow}>
-              <Text style={styles.analysisInfoLabel}>Quality Grade:</Text>
-              <Text
-                style={[
-                  styles.analysisInfoValue,
-                  {
-                    color:
-                      analysisResult.color_analysis.quality_grade === "Export"
-                        ? "#22c55e"
-                        : analysisResult.color_analysis.quality_grade ===
-                            "Local"
-                          ? "#eab308"
-                          : "#ef4444",
-                  },
-                ]}
-              >
-                {analysisResult.color_analysis.quality_grade}
-              </Text>
-            </View>
-            <View style={styles.analysisInfoRow}>
-              <Text style={styles.analysisInfoLabel}>Color Consistency:</Text>
-              <Text style={styles.analysisInfoValue}>
-                {analysisResult.color_analysis.consistency_score.toFixed(1)}%
-              </Text>
-            </View>
-          </View>
-        )}
 
         <View style={commonStyles.bottomButtonBar}>
           <TouchableOpacity
@@ -429,87 +332,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
 
-  imageScrollView: {
-    flex: 1,
-  },
-
-  imageSlide: {
-    width: screenWidth,
-    flex: 1,
-  },
-
   resultImage: {
     flex: 1,
     width: "100%",
-  },
-
-  pageIndicatorContainer: {
-    position: "absolute",
-    bottom: 16,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-  },
-
-  pageIndicator: {
-    flexDirection: "row",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 8,
-  },
-
-  dotTouchable: {
-    padding: 4,
-  },
-
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.4)",
-  },
-
-  dotActive: {
-    backgroundColor: "#fff",
-    width: 24,
-  },
-
-  pageLabel: {
-    marginTop: 8,
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    fontWeight: "500",
-  },
-
-  analysisInfoCard: {
-    backgroundColor: theme.colors.backgroundLight,
-    marginHorizontal: 20,
-    marginBottom: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-
-  analysisInfoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 4,
-  },
-
-  analysisInfoLabel: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-  },
-
-  analysisInfoValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: theme.colors.text,
   },
 
   previewWrapper: {

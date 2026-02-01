@@ -434,6 +434,115 @@ def draw_detection_boxes(img: np.ndarray, results, indices: list, model) -> np.n
     
     return annotated_img
 
+
+def draw_combined_result_image(img: np.ndarray, results, indices: list, model, color_analysis: dict = None) -> np.ndarray:
+    """
+    Draw a single combined image with:
+    - Bounding boxes around detected fish
+    - Semi-transparent polygon masks (if available)
+    - Color consistency score overlay at bottom
+    """
+    annotated_img = img.copy()
+    h, w = img.shape[:2]
+    
+    boxes = results[0].boxes
+    masks = results[0].masks
+    has_masks = masks is not None and len(masks) > 0
+    
+    # Colors for different fish (BGR format)
+    colors = [
+        (255, 107, 107),  # Red/Coral
+        (78, 205, 196),   # Teal
+        (69, 183, 209),   # Blue
+        (150, 206, 180),  # Green
+        (255, 234, 167),  # Yellow
+        (221, 160, 221),  # Plum
+    ]
+    
+    # Determine grade color if we have color analysis
+    if color_analysis:
+        grade = color_analysis.get("quality_grade", "Unknown")
+        if grade == "Export":
+            grade_color = (80, 200, 120)  # Green (BGR)
+        elif grade == "Local":
+            grade_color = (80, 180, 255)  # Orange/Yellow (BGR)
+        else:
+            grade_color = (80, 80, 255)   # Red (BGR)
+    
+    # STEP 1: Draw semi-transparent polygon masks (if available)
+    if has_masks:
+        for i, idx in enumerate(indices):
+            if idx < len(masks):
+                color = colors[i % len(colors)]
+                
+                # Get mask and resize to image dimensions
+                mask_data = masks[idx].data[0].cpu().numpy()
+                if mask_data.shape != (h, w):
+                    mask_resized = cv2.resize(mask_data.astype(np.float32), (w, h), interpolation=cv2.INTER_LINEAR)
+                    mask_binary = (mask_resized > 0.5).astype(np.uint8)
+                else:
+                    mask_binary = (mask_data > 0.5).astype(np.uint8)
+                
+                # Create colored overlay (semi-transparent fill)
+                colored_mask = np.zeros_like(annotated_img)
+                colored_mask[mask_binary == 1] = color
+                annotated_img = cv2.addWeighted(annotated_img, 1, colored_mask, 0.3, 0)
+                
+                # Draw polygon outline
+                contours, _ = cv2.findContours(mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                cv2.drawContours(annotated_img, contours, -1, color, 2)
+    
+    # STEP 2: Draw bounding boxes with labels on top
+    for i, idx in enumerate(indices):
+        color = colors[i % len(colors)]
+        
+        if boxes is not None and idx < len(boxes):
+            box = boxes[idx]
+            x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
+            fish_type = model.names[int(box.cls[0])]
+            confidence = float(box.conf[0])
+            
+            # Draw bounding box
+            cv2.rectangle(annotated_img, (x1, y1), (x2, y2), color, 3)
+            
+            # Label background
+            label = f"{fish_type} {confidence:.0%}"
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.7
+            thickness = 2
+            (label_w, label_h), _ = cv2.getTextSize(label, font, font_scale, thickness)
+            
+            # Draw label background at top of box
+            cv2.rectangle(annotated_img, (x1, y1 - label_h - 14), (x1 + label_w + 10, y1), color, -1)
+            cv2.putText(annotated_img, label, (x1 + 5, y1 - 7), font, font_scale, (255, 255, 255), thickness)
+    
+    # STEP 3: Draw color consistency score overlay at bottom (if available)
+    if color_analysis:
+        score = color_analysis.get("consistency_score", 0)
+        grade = color_analysis.get("quality_grade", "Unknown")
+        
+        # Create semi-transparent overlay bar at bottom
+        overlay_height = 70
+        overlay = annotated_img.copy()
+        cv2.rectangle(overlay, (0, h - overlay_height), (w, h), (0, 0, 0), -1)
+        annotated_img = cv2.addWeighted(overlay, 0.7, annotated_img, 0.3, 0)
+        
+        # Draw combined text
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        
+        # Left side: Color score
+        score_text = f"Color: {score:.1f}%"
+        cv2.putText(annotated_img, score_text, (20, h - 25), font, 0.8, (255, 255, 255), 2)
+        
+        # Right side: Grade badge
+        grade_text = f"Grade: {grade}"
+        (grade_w, _), _ = cv2.getTextSize(grade_text, font, 0.9, 2)
+        cv2.putText(annotated_img, grade_text, (w - grade_w - 20, h - 25), font, 0.9, grade_color, 2)
+    
+    return annotated_img
+    
+    return annotated_img
+
 # Configure Cloudinary
 cloudinary.config(
   cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
@@ -594,8 +703,7 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
   detected_confidences = []
   is_daing_detected = False
   filtered_indices = []
-  detection_img = None
-  analysis_img = None
+  result_img = None
   color_analysis = None
   
   # Filter detections based on confidence
@@ -605,12 +713,12 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
     
     if not high_conf_detections.any():
       # NO DAING DETECTED
-      detection_img = img.copy()
-      h, w = detection_img.shape[:2]
+      result_img = img.copy()
+      h, w = result_img.shape[:2]
       
-      overlay = detection_img.copy()
+      overlay = result_img.copy()
       cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
-      cv2.addWeighted(overlay, 0.3, detection_img, 0.7, 0, detection_img)
+      cv2.addWeighted(overlay, 0.3, result_img, 0.7, 0, result_img)
       
       text = "NO DAING DETECTED"
       font = cv2.FONT_HERSHEY_SIMPLEX
@@ -621,8 +729,8 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
       text_x = (w - text_w) // 2
       text_y = (h + text_h) // 2
       
-      cv2.putText(detection_img, text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness + 2)
-      cv2.putText(detection_img, text, (text_x, text_y), font, font_scale, (255, 255, 255), thickness)
+      cv2.putText(result_img, text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness + 2)
+      cv2.putText(result_img, text, (text_x, text_y), font, font_scale, (255, 255, 255), thickness)
       
       is_daing_detected = False
       print("⚠️ No high-confidence daing detected")
@@ -637,10 +745,7 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
           detected_fish_types.append(fish_type)
           detected_confidences.append(confidence)
       
-      # IMAGE 1: Detection with bounding boxes
-      detection_img = draw_detection_boxes(img, results, filtered_indices, model)
-      
-      # Perform color analysis BEFORE creating analysis image
+      # Perform color analysis
       if has_masks:
           filtered_masks = masks[filtered_indices]
           filtered_boxes = boxes[filtered_indices] if filtered_indices else None
@@ -649,24 +754,8 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
           filtered_boxes = boxes[filtered_indices] if filtered_indices else None
           color_analysis = analyze_color_consistency_with_boxes(img, filtered_boxes)
       
-      # IMAGE 2: Analysis with polygon masks and color score
-      if has_masks and color_analysis:
-          analysis_img = draw_color_analysis_image(img, results, filtered_indices, model, color_analysis)
-      else:
-          # If no masks, use detection image with score overlay
-          analysis_img = detection_img.copy()
-          if color_analysis:
-              h, w = analysis_img.shape[:2]
-              # Add score overlay at bottom
-              overlay_height = 80
-              overlay = analysis_img.copy()
-              cv2.rectangle(overlay, (0, h - overlay_height), (w, h), (0, 0, 0), -1)
-              analysis_img = cv2.addWeighted(overlay, 0.7, analysis_img, 0.3, 0)
-              
-              score_text = f"Color: {color_analysis['consistency_score']:.1f}% - {color_analysis['quality_grade']}"
-              font = cv2.FONT_HERSHEY_SIMPLEX
-              (text_w, text_h), _ = cv2.getTextSize(score_text, font, 0.8, 2)
-              cv2.putText(analysis_img, score_text, ((w - text_w) // 2, h - 30), font, 0.8, (255, 255, 255), 2)
+      # Create SINGLE combined result image with boxes, masks, and score
+      result_img = draw_combined_result_image(img, results, filtered_indices, model, color_analysis)
       
       is_daing_detected = True
       print(f"✅ Found {len(filtered_indices)} high-confidence daing detection(s)")
@@ -674,12 +763,12 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
           print(f"🎨 Color Analysis: Score={color_analysis['consistency_score']}% Grade={color_analysis['quality_grade']}")
   else:
     # No detections at all
-    detection_img = img.copy()
-    h, w = detection_img.shape[:2]
+    result_img = img.copy()
+    h, w = result_img.shape[:2]
     
-    overlay = detection_img.copy()
+    overlay = result_img.copy()
     cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.3, detection_img, 0.7, 0, detection_img)
+    cv2.addWeighted(overlay, 0.3, result_img, 0.7, 0, result_img)
     
     text = "NO DAING DETECTED"
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -690,16 +779,16 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
     text_x = (w - text_w) // 2
     text_y = (h + text_h) // 2
     
-    cv2.putText(detection_img, text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness + 2)
-    cv2.putText(detection_img, text, (text_x, text_y), font, font_scale, (255, 255, 255), thickness)
+    cv2.putText(result_img, text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness + 2)
+    cv2.putText(result_img, text, (text_x, text_y), font, font_scale, (255, 255, 255), thickness)
     
     print("⚠️ No daing detected at all")
 
-  # 4. ENCODE IMAGES
-  success1, encoded_detection = cv2.imencode('.jpg', detection_img)
-  if not success1:
-    raise ValueError("Failed to encode detection image")
-  detection_bytes = encoded_detection.tobytes()
+  # 4. ENCODE IMAGE
+  success, encoded_result = cv2.imencode('.jpg', result_img)
+  if not success:
+    raise ValueError("Failed to encode result image")
+  result_bytes = encoded_result.tobytes()
   
   # 5. UPLOAD TO CLOUDINARY & LOG HISTORY
   try:
@@ -708,33 +797,19 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
     history_folder = f"daing-history/{date_folder}"
     history_id = f"scan_{now.strftime('%Y%m%d_%H%M%S_%f')}"
 
-    # Upload detection image (main history image)
-    detection_upload = cloudinary.uploader.upload(
-      io.BytesIO(detection_bytes),
+    # Upload single combined result image
+    result_upload = cloudinary.uploader.upload(
+      io.BytesIO(result_bytes),
       folder=history_folder,
       public_id=history_id,
       resource_type="image"
     )
-    detection_url = detection_upload.get("secure_url")
-    
-    # Upload analysis image if we have one
-    analysis_url = None
-    if analysis_img is not None:
-        success2, encoded_analysis = cv2.imencode('.jpg', analysis_img)
-        if success2:
-            analysis_upload = cloudinary.uploader.upload(
-                io.BytesIO(encoded_analysis.tobytes()),
-                folder=history_folder,
-                public_id=f"{history_id}_analysis",
-                resource_type="image"
-            )
-            analysis_url = analysis_upload.get("secure_url")
-            print(f"📊 Analysis image uploaded: {history_id}_analysis")
+    result_url = result_upload.get("secure_url")
 
     add_history_entry({
       "id": history_id,
       "timestamp": now.isoformat(),
-      "url": detection_url,
+      "url": result_url,
       "folder": history_folder
     })
     print(f"📚 History saved: {history_folder}/{history_id}")
@@ -760,12 +835,11 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
         except Exception as dataset_error:
           print(f"⚠️ Failed to auto-save to dataset: {dataset_error}")
     
-    # 8. RETURN JSON WITH BOTH IMAGE URLS
+    # 8. RETURN JSON WITH SINGLE COMBINED IMAGE URL
     response_data = {
         "status": "success",
         "is_daing_detected": is_daing_detected,
-        "detection_image": detection_url,
-        "analysis_image": analysis_url,
+        "result_image": result_url,
         "detections": [
             {"fish_type": ft, "confidence": conf} 
             for ft, conf in zip(detected_fish_types, detected_confidences)
@@ -780,8 +854,8 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
     import traceback
     traceback.print_exc()
     
-    # Return at least the detection image on error
-    return StreamingResponse(io.BytesIO(detection_bytes), media_type="image/jpeg")
+    # Return at least the result image on error
+    return StreamingResponse(io.BytesIO(result_bytes), media_type="image/jpeg")
 
 
 # --- KEEP YOUR DATASET/HISTORY ENDPOINTS BELOW AS IS ---

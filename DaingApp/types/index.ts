@@ -20,8 +20,7 @@ export interface ColorConsistencyStats {
 export interface AnalysisScanResult {
   status: string;
   is_daing_detected: boolean;
-  detection_image: string;
-  analysis_image: string | null;
+  result_image: string;
   detections: Array<{ fish_type: string; confidence: number }>;
   color_analysis: {
     consistency_score: number;
