@@ -10,6 +10,7 @@ import {
 import { CameraView } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
 import { commonStyles, theme } from "../styles/common";
+import { ZoomableImage } from "./ZoomableImage";
 import type { Screen, AnalysisScanResult } from "../types";
 
 interface ScanScreenProps {
@@ -57,12 +58,11 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
           <View style={{ width: 40 }} />
         </View>
 
-        {/* Single Result Image */}
+        {/* Single Result Image - Zoomable */}
         <View style={styles.resultContainer}>
-          <Image
-            source={{ uri: analysisResult.result_image }}
+          <ZoomableImage
+            uri={analysisResult.result_image}
             style={styles.resultImage}
-            resizeMode="contain"
           />
         </View>
 

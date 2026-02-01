@@ -4,3 +4,4 @@ export { AnalyticsScreen } from "./AnalyticsScreen";
 export { SettingsModal } from "./SettingsModal";
 export { HistoryScreen } from "./HistoryScreen";
 export { AutoDatasetScreen } from "./AutoDatasetScreen";
+export { ZoomableImage } from "./ZoomableImage";

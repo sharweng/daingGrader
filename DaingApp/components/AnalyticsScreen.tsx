@@ -10,6 +10,14 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import Svg, {
+  Circle,
+  G,
+  Path,
+  Line,
+  Text as SvgText,
+  Polyline,
+} from "react-native-svg";
 import { commonStyles, theme } from "../styles/common";
 import { fetchAnalytics } from "../services/api";
 import type { Screen, AnalyticsSummary } from "../types";
@@ -209,30 +217,68 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
           </View>
         </View>
 
-        {/* Daing vs Non-Daing Pie Chart */}
+        {/* Daing vs Non-Daing Pie Chart - Circular */}
         <View style={styles.chartContainer}>
           <Text style={styles.chartTitle}>Detection Overview</Text>
           <View style={styles.pieChartContainer}>
-            {/* Simple visual pie representation */}
-            <View style={styles.pieChart}>
-              <View
-                style={[
-                  styles.pieSlice,
-                  {
-                    backgroundColor: "#4CAF50",
-                    width: `${daingPercentage}%`,
-                  },
-                ]}
-              />
-              <View
-                style={[
-                  styles.pieSlice,
-                  {
-                    backgroundColor: "#F44336",
-                    width: `${nonDaingPercentage}%`,
-                  },
-                ]}
-              />
+            {/* Circular Pie Chart using SVG */}
+            <View style={styles.circularPieContainer}>
+              <Svg width={160} height={160} viewBox="0 0 100 100">
+                <G transform="rotate(-90 50 50)">
+                  {/* Background circle */}
+                  <Circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="transparent"
+                    stroke="#2A2A4A"
+                    strokeWidth="20"
+                  />
+                  {/* Daing slice (green) */}
+                  <Circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="transparent"
+                    stroke="#4CAF50"
+                    strokeWidth="20"
+                    strokeDasharray={`${(daingPercentage / 100) * 251.2} 251.2`}
+                    strokeLinecap="butt"
+                  />
+                  {/* Non-Daing slice (red) - offset by daing percentage */}
+                  <Circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="transparent"
+                    stroke="#F44336"
+                    strokeWidth="20"
+                    strokeDasharray={`${(nonDaingPercentage / 100) * 251.2} 251.2`}
+                    strokeDashoffset={-((daingPercentage / 100) * 251.2)}
+                    strokeLinecap="butt"
+                  />
+                </G>
+                {/* Center text */}
+                <SvgText
+                  x="50"
+                  y="46"
+                  textAnchor="middle"
+                  fontSize="16"
+                  fontWeight="bold"
+                  fill="#FFFFFF"
+                >
+                  {analytics.total_scans}
+                </SvgText>
+                <SvgText
+                  x="50"
+                  y="60"
+                  textAnchor="middle"
+                  fontSize="8"
+                  fill="#888888"
+                >
+                  Total Scans
+                </SvgText>
+              </Svg>
             </View>
             <View style={styles.legendContainer}>
               <View style={styles.legendItem}>
@@ -432,33 +478,288 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
             </View>
           )}
 
-        {/* Daily Scans */}
+        {/* Daily Scans - Line Graph */}
         {Object.keys(analytics.daily_scans).length > 0 && (
           <View style={styles.chartContainer}>
-            <Text style={styles.chartTitle}>Daily Scans (Last 7 Days)</Text>
-            <View style={styles.dailyScansContainer}>
-              {Object.entries(analytics.daily_scans).map(([date, count]) => {
-                const maxDaily = Math.max(
-                  ...Object.values(analytics.daily_scans),
-                );
-                const height = maxDaily > 0 ? (count / maxDaily) * 100 : 0;
-                const formattedDate = new Date(date).toLocaleDateString("en", {
-                  month: "short",
-                  day: "numeric",
-                });
-                return (
-                  <View key={date} style={styles.dailyBar}>
-                    <Text style={styles.dailyCount}>{count}</Text>
-                    <View style={styles.dailyBarTrack}>
-                      <View
-                        style={[styles.dailyBarFill, { height: `${height}%` }]}
+            <Text style={styles.chartTitle}>
+              Daily Scans Trend (Last 7 Days)
+            </Text>
+            {(() => {
+              const dailyEntries = Object.entries(analytics.daily_scans).sort(
+                ([a], [b]) => a.localeCompare(b),
+              );
+              const maxDaily = Math.max(
+                ...Object.values(analytics.daily_scans),
+                1,
+              );
+              const chartWidth = screenWidth - 80;
+              const chartHeight = 120;
+              const padding = { left: 30, right: 10, top: 10, bottom: 30 };
+              const graphWidth = chartWidth - padding.left - padding.right;
+              const graphHeight = chartHeight - padding.top - padding.bottom;
+
+              // Generate line path points
+              const points = dailyEntries
+                .map(([, count], index) => {
+                  const x =
+                    padding.left +
+                    (index / (dailyEntries.length - 1 || 1)) * graphWidth;
+                  const y =
+                    padding.top +
+                    graphHeight -
+                    (count / maxDaily) * graphHeight;
+                  return `${x},${y}`;
+                })
+                .join(" ");
+
+              return (
+                <View style={styles.lineChartContainer}>
+                  <Svg width={chartWidth} height={chartHeight}>
+                    {/* Grid lines */}
+                    {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => (
+                      <Line
+                        key={`grid-${i}`}
+                        x1={padding.left}
+                        y1={padding.top + graphHeight * (1 - ratio)}
+                        x2={chartWidth - padding.right}
+                        y2={padding.top + graphHeight * (1 - ratio)}
+                        stroke="#2A2A4A"
+                        strokeWidth="1"
                       />
-                    </View>
-                    <Text style={styles.dailyLabel}>{formattedDate}</Text>
+                    ))}
+
+                    {/* Y-axis labels */}
+                    <SvgText
+                      x="5"
+                      y={padding.top + 4}
+                      fontSize="10"
+                      fill="#888888"
+                    >
+                      {maxDaily}
+                    </SvgText>
+                    <SvgText
+                      x="5"
+                      y={padding.top + graphHeight / 2 + 4}
+                      fontSize="10"
+                      fill="#888888"
+                    >
+                      {Math.round(maxDaily / 2)}
+                    </SvgText>
+                    <SvgText
+                      x="5"
+                      y={padding.top + graphHeight + 4}
+                      fontSize="10"
+                      fill="#888888"
+                    >
+                      0
+                    </SvgText>
+
+                    {/* Area under the line */}
+                    <Path
+                      d={`M ${padding.left},${padding.top + graphHeight} ${dailyEntries
+                        .map(([, count], index) => {
+                          const x =
+                            padding.left +
+                            (index / (dailyEntries.length - 1 || 1)) *
+                              graphWidth;
+                          const y =
+                            padding.top +
+                            graphHeight -
+                            (count / maxDaily) * graphHeight;
+                          return `L ${x},${y}`;
+                        })
+                        .join(
+                          " ",
+                        )} L ${chartWidth - padding.right},${padding.top + graphHeight} Z`}
+                      fill="rgba(76, 175, 80, 0.2)"
+                    />
+
+                    {/* Line */}
+                    <Polyline
+                      points={points}
+                      fill="none"
+                      stroke="#4CAF50"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+
+                    {/* Data points */}
+                    {dailyEntries.map(([, count], index) => {
+                      const x =
+                        padding.left +
+                        (index / (dailyEntries.length - 1 || 1)) * graphWidth;
+                      const y =
+                        padding.top +
+                        graphHeight -
+                        (count / maxDaily) * graphHeight;
+                      return (
+                        <G key={index}>
+                          <Circle
+                            cx={x}
+                            cy={y}
+                            r="6"
+                            fill={theme.colors.backgroundLight}
+                          />
+                          <Circle cx={x} cy={y} r="4" fill="#4CAF50" />
+                        </G>
+                      );
+                    })}
+
+                    {/* X-axis labels */}
+                    {dailyEntries.map(([date], index) => {
+                      const x =
+                        padding.left +
+                        (index / (dailyEntries.length - 1 || 1)) * graphWidth;
+                      const formattedDate = new Date(date).toLocaleDateString(
+                        "en",
+                        {
+                          month: "short",
+                          day: "numeric",
+                        },
+                      );
+                      return (
+                        <SvgText
+                          key={`label-${index}`}
+                          x={x}
+                          y={chartHeight - 5}
+                          textAnchor="middle"
+                          fontSize="9"
+                          fill="#888888"
+                        >
+                          {formattedDate}
+                        </SvgText>
+                      );
+                    })}
+                  </Svg>
+
+                  {/* Values above points */}
+                  <View style={styles.lineChartValuesContainer}>
+                    {dailyEntries.map(([date, count], index) => (
+                      <View
+                        key={date}
+                        style={[
+                          styles.lineChartValue,
+                          {
+                            left:
+                              padding.left +
+                              (index / (dailyEntries.length - 1 || 1)) *
+                                graphWidth -
+                              15,
+                            top:
+                              padding.top +
+                              graphHeight -
+                              (count / maxDaily) * graphHeight -
+                              25,
+                          },
+                        ]}
+                      >
+                        <Text style={styles.lineChartValueText}>{count}</Text>
+                      </View>
+                    ))}
                   </View>
-                );
-              })}
-            </View>
+                </View>
+              );
+            })()}
+          </View>
+        )}
+
+        {/* Fish Type Distribution Pie Chart */}
+        {Object.keys(analytics.fish_type_distribution).length > 0 && (
+          <View style={styles.chartContainer}>
+            <Text style={styles.chartTitle}>Fish Type Distribution</Text>
+            {(() => {
+              const fishEntries = Object.entries(
+                analytics.fish_type_distribution,
+              ).sort(([, a], [, b]) => b - a);
+              const totalFish = fishEntries.reduce(
+                (sum, [, count]) => sum + count,
+                0,
+              );
+              let currentAngle = -90; // Start from top
+
+              // Generate pie slices
+              const slices = fishEntries.map(([fishType, count]) => {
+                const percentage = (count / totalFish) * 100;
+                const angle = (percentage / 100) * 360;
+                const startAngle = currentAngle;
+                currentAngle += angle;
+
+                // Calculate arc path
+                const startRad = (startAngle * Math.PI) / 180;
+                const endRad = ((startAngle + angle) * Math.PI) / 180;
+                const x1 = 50 + 40 * Math.cos(startRad);
+                const y1 = 50 + 40 * Math.sin(startRad);
+                const x2 = 50 + 40 * Math.cos(endRad);
+                const y2 = 50 + 40 * Math.sin(endRad);
+                const largeArc = angle > 180 ? 1 : 0;
+
+                return {
+                  fishType,
+                  count,
+                  percentage,
+                  color: getColor(fishType),
+                  path:
+                    angle >= 360
+                      ? `M 50 10 A 40 40 0 1 1 49.99 10 Z` // Full circle
+                      : `M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArc} 1 ${x2} ${y2} Z`,
+                };
+              });
+
+              return (
+                <View style={styles.fishPieContainer}>
+                  <Svg width={160} height={160} viewBox="0 0 100 100">
+                    {slices.map(({ fishType, path, color }) => (
+                      <Path key={fishType} d={path} fill={color} />
+                    ))}
+                    {/* Center hole for donut effect */}
+                    <Circle
+                      cx="50"
+                      cy="50"
+                      r="25"
+                      fill={theme.colors.backgroundLight}
+                    />
+                    <SvgText
+                      x="50"
+                      y="48"
+                      textAnchor="middle"
+                      fontSize="14"
+                      fontWeight="bold"
+                      fill="#FFFFFF"
+                    >
+                      {totalFish}
+                    </SvgText>
+                    <SvgText
+                      x="50"
+                      y="58"
+                      textAnchor="middle"
+                      fontSize="7"
+                      fill="#888888"
+                    >
+                      Fish
+                    </SvgText>
+                  </Svg>
+                  <View style={styles.fishPieLegend}>
+                    {slices.map(({ fishType, count, percentage, color }) => (
+                      <View key={fishType} style={styles.fishPieLegendItem}>
+                        <View
+                          style={[
+                            styles.fishPieLegendDot,
+                            { backgroundColor: color },
+                          ]}
+                        />
+                        <Text
+                          style={styles.fishPieLegendText}
+                          numberOfLines={1}
+                        >
+                          {fishType}: {count} ({percentage.toFixed(0)}%)
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              );
+            })()}
           </View>
         )}
 
@@ -812,5 +1113,58 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#fff",
     textAlign: "right",
+  },
+  // Circular Pie Chart Styles
+  circularPieContainer: {
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  // Line Chart Styles
+  lineChartContainer: {
+    position: "relative",
+    marginTop: 10,
+  },
+  lineChartValuesContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  lineChartValue: {
+    position: "absolute",
+    width: 30,
+    alignItems: "center",
+  },
+  lineChartValueText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#4CAF50",
+  },
+  // Fish Type Pie Chart Styles
+  fishPieContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  fishPieLegend: {
+    flex: 1,
+    marginLeft: 16,
+    gap: 6,
+  },
+  fishPieLegendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  fishPieLegendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  fishPieLegendText: {
+    fontSize: 11,
+    color: "#CCC",
+    flex: 1,
   },
 });

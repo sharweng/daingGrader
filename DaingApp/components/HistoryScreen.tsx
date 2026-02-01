@@ -21,6 +21,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { commonStyles, theme } from "../styles/common";
 import { historyStyles } from "../styles/history";
+import { ZoomableImage } from "./ZoomableImage";
 import type { Screen, HistoryEntry } from "../types";
 import { fetchHistory, deleteHistoryEntry } from "../services/api";
 
@@ -275,11 +276,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
           backgroundColor: theme.colors.background,
         }}
       >
-        <Image
-          source={{ uri: item.url }}
-          style={{ width: "100%", flex: 1 }}
-          resizeMode="contain"
-        />
+        <ZoomableImage uri={item.url} style={{ width: screenWidth, flex: 1 }} />
       </View>
     );
 
