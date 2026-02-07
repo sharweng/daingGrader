@@ -15,6 +15,7 @@ import cloudinary.uploader
 
 from .model import get_model, run_inference
 from .color_analysis import analyze_color_consistency_with_masks, analyze_color_consistency_with_boxes
+from .mold_analysis import analyze_mold_with_masks, analyze_mold_with_boxes
 from .drawing import draw_combined_result_image, draw_no_detection_image
 from .history import (
     add_history_entry,
@@ -56,6 +57,7 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
     is_daing_detected = False
     result_img = None
     color_analysis = None
+    mold_analysis = None
     
     boxes = results[0].boxes
     masks = results[0].masks
@@ -64,21 +66,25 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
         # DAING DETECTED
         is_daing_detected = True
         
-        # Perform color analysis
+        # Perform color analysis and mold analysis
         if has_masks:
             filtered_masks = masks[filtered_indices]
             filtered_boxes = boxes[filtered_indices] if filtered_indices else None
             color_analysis = analyze_color_consistency_with_masks(img, filtered_masks, filtered_boxes)
+            mold_analysis = analyze_mold_with_masks(img, filtered_masks, filtered_boxes)
         else:
             filtered_boxes = boxes[filtered_indices] if filtered_indices else None
             color_analysis = analyze_color_consistency_with_boxes(img, filtered_boxes)
+            mold_analysis = analyze_mold_with_boxes(img, filtered_boxes)
         
-        # Create combined result image
-        result_img = draw_combined_result_image(img, results, filtered_indices, model, color_analysis)
+        # Create combined result image with mold visualization
+        result_img = draw_combined_result_image(img, results, filtered_indices, model, color_analysis, mold_analysis)
         
         print(f"✅ Found {len(filtered_indices)} high-confidence daing detection(s)")
         if color_analysis:
             print(f"🎨 Color Analysis: Score={color_analysis['consistency_score']}% Grade={color_analysis['quality_grade']}")
+        if mold_analysis:
+            print(f"🦠 Mold Analysis: Severity={mold_analysis['overall_severity']} Coverage={mold_analysis['avg_coverage_percent']}%")
     else:
         # NO DAING DETECTED
         result_img = draw_no_detection_image(img)
@@ -119,7 +125,8 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
             detected_confidences,
             is_daing_detected,
             scan_id=history_id,
-            color_analysis=color_analysis
+            color_analysis=color_analysis,
+            mold_analysis=mold_analysis
         )
         
         # 6. AUTO-SAVE HIGH-CONFIDENCE IMAGES
@@ -137,7 +144,8 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
                 {"fish_type": ft, "confidence": conf}
                 for ft, conf in zip(detected_fish_types, detected_confidences)
             ],
-            "color_analysis": color_analysis
+            "color_analysis": color_analysis,
+            "mold_analysis": mold_analysis
         }
         
     except Exception as history_error:

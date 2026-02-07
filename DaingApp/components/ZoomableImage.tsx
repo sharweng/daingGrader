@@ -68,10 +68,29 @@ export const ZoomableImage: React.FC<ZoomableImageProps> = ({
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        // Respond to movement if zoomed in or pinching
-        return Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2;
+      onStartShouldSetPanResponder: (evt) => {
+        // Only capture if multi-touch (pinch) or already zoomed
+        return evt.nativeEvent.touches.length >= 2 || lastScale.current > 1.1;
+      },
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        const touches = evt.nativeEvent.touches;
+
+        // If pinching (2 fingers), always capture
+        if (touches.length >= 2) return true;
+
+        // If zoomed in, only capture vertical panning or diagonal movement
+        // Allow horizontal swipes to pass through to parent FlatList
+        if (lastScale.current > 1.1) {
+          const absX = Math.abs(gestureState.dx);
+          const absY = Math.abs(gestureState.dy);
+
+          // Only capture if vertical movement is significant OR diagonal movement
+          // This allows pure horizontal swipes to pass through
+          return absY > 5 || (absX > 5 && absY > 3);
+        }
+
+        // Not zoomed, let parent handle all gestures
+        return false;
       },
       onPanResponderGrant: (evt) => {
         const touches = evt.nativeEvent.touches;

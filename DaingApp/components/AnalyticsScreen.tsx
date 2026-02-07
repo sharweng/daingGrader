@@ -45,6 +45,16 @@ const getColor = (fishType: string): string => {
   return FISH_COLORS[fishType] || FISH_COLORS.default;
 };
 
+// Helper function to get heat map color based on contamination rate
+const getZoneHeatColor = (affected: number, total: number): string => {
+  if (total === 0 || affected === 0) return "rgba(76, 175, 80, 0.2)"; // Green - no contamination
+  const rate = (affected / total) * 100;
+  if (rate > 30) return "rgba(244, 67, 54, 0.6)"; // Red - high
+  if (rate > 15) return "rgba(255, 152, 0, 0.5)"; // Orange - moderate
+  if (rate > 5) return "rgba(255, 193, 7, 0.4)"; // Yellow - low
+  return "rgba(76, 175, 80, 0.3)"; // Green - minimal
+};
+
 export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
   onNavigate,
   analyticsUrl,
@@ -477,6 +487,249 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
               )}
             </View>
           )}
+
+        {/* Mold Analysis Section */}
+        {analytics.mold_analysis && (
+          <View style={styles.chartContainer}>
+            <Text style={styles.chartTitle}>
+              🦠 Mold Contamination Analysis
+            </Text>
+
+            {/* Mold Summary Stats */}
+            <View style={styles.moldSummaryContainer}>
+              <View style={styles.moldSummaryCard}>
+                <Text style={styles.moldSummaryValue}>
+                  {analytics.mold_analysis.average_coverage.toFixed(1)}%
+                </Text>
+                <Text style={styles.moldSummaryLabel}>Avg Coverage</Text>
+              </View>
+              <View style={styles.moldSummaryCard}>
+                <Text style={styles.moldSummaryValue}>
+                  {Object.values(
+                    analytics.mold_analysis.severity_distribution,
+                  ).reduce((a, b) => a + b, 0) -
+                    (analytics.mold_analysis.severity_distribution.None || 0)}
+                </Text>
+                <Text style={styles.moldSummaryLabel}>Contaminated</Text>
+              </View>
+            </View>
+
+            {/* Severity Distribution */}
+            <Text style={styles.chartSubtitle}>Severity Distribution</Text>
+            <View style={styles.moldSeverityContainer}>
+              {Object.entries(analytics.mold_analysis.severity_distribution)
+                .filter(([severity]) => severity !== "None")
+                .map(([severity, count]) => {
+                  const totalWithMold = Object.entries(
+                    analytics.mold_analysis!.severity_distribution,
+                  )
+                    .filter(([s]) => s !== "None")
+                    .reduce((sum, [, c]) => sum + c, 0);
+                  const percentage =
+                    totalWithMold > 0 ? (count / totalWithMold) * 100 : 0;
+                  const severityColor =
+                    severity === "Severe"
+                      ? "#F44336"
+                      : severity === "Moderate"
+                        ? "#FF9800"
+                        : "#FFC107";
+
+                  return (
+                    <View key={severity} style={styles.moldSeverityRow}>
+                      <View style={styles.moldSeverityLabel}>
+                        <View
+                          style={[
+                            styles.moldSeverityDot,
+                            { backgroundColor: severityColor },
+                          ]}
+                        />
+                        <Text style={styles.moldSeverityText}>{severity}</Text>
+                      </View>
+                      <View style={styles.moldSeverityBarTrack}>
+                        <View
+                          style={[
+                            styles.moldSeverityBarFill,
+                            {
+                              width: `${percentage}%`,
+                              backgroundColor: severityColor,
+                            },
+                          ]}
+                        />
+                      </View>
+                      <Text style={styles.moldSeverityCount}>{count}</Text>
+                    </View>
+                  );
+                })}
+            </View>
+
+            {/* Spatial Distribution - Heat Map Style */}
+            <Text style={styles.chartSubtitle}>
+              Spatial Distribution (Most Affected Areas)
+            </Text>
+            <View style={styles.spatialDistributionContainer}>
+              <View style={styles.fishDiagramContainer}>
+                {/* Fish body outline representation */}
+                <View style={styles.fishDiagram}>
+                  {/* Head zone */}
+                  <View
+                    style={[
+                      styles.fishZone,
+                      styles.fishZoneHead,
+                      {
+                        backgroundColor: getZoneHeatColor(
+                          analytics.mold_analysis.spatial_zones.head
+                            ?.fish_affected || 0,
+                          analytics.total_scans,
+                        ),
+                      },
+                    ]}
+                  >
+                    <Text style={styles.fishZoneLabel}>Head</Text>
+                    <Text style={styles.fishZoneValue}>
+                      {analytics.mold_analysis.spatial_zones.head
+                        ?.fish_affected || 0}
+                    </Text>
+                  </View>
+                  {/* Body upper zone */}
+                  <View
+                    style={[
+                      styles.fishZone,
+                      styles.fishZoneBodyUpper,
+                      {
+                        backgroundColor: getZoneHeatColor(
+                          analytics.mold_analysis.spatial_zones.body_upper
+                            ?.fish_affected || 0,
+                          analytics.total_scans,
+                        ),
+                      },
+                    ]}
+                  >
+                    <Text style={styles.fishZoneLabel}>Body</Text>
+                    <Text style={styles.fishZoneValue}>
+                      {analytics.mold_analysis.spatial_zones.body_upper
+                        ?.fish_affected || 0}
+                    </Text>
+                  </View>
+                  {/* Belly zone */}
+                  <View
+                    style={[
+                      styles.fishZone,
+                      styles.fishZoneBelly,
+                      {
+                        backgroundColor: getZoneHeatColor(
+                          analytics.mold_analysis.spatial_zones.belly
+                            ?.fish_affected || 0,
+                          analytics.total_scans,
+                        ),
+                      },
+                    ]}
+                  >
+                    <Text style={styles.fishZoneLabel}>Belly</Text>
+                    <Text style={styles.fishZoneValue}>
+                      {analytics.mold_analysis.spatial_zones.belly
+                        ?.fish_affected || 0}
+                    </Text>
+                  </View>
+                  {/* Tail zone */}
+                  <View
+                    style={[
+                      styles.fishZone,
+                      styles.fishZoneTail,
+                      {
+                        backgroundColor: getZoneHeatColor(
+                          analytics.mold_analysis.spatial_zones.tail
+                            ?.fish_affected || 0,
+                          analytics.total_scans,
+                        ),
+                      },
+                    ]}
+                  >
+                    <Text style={styles.fishZoneLabel}>Tail</Text>
+                    <Text style={styles.fishZoneValue}>
+                      {analytics.mold_analysis.spatial_zones.tail
+                        ?.fish_affected || 0}
+                    </Text>
+                  </View>
+                </View>
+                {/* Heat map legend */}
+                <View style={styles.heatMapLegend}>
+                  <Text style={styles.heatMapLegendText}>Low</Text>
+                  <View style={styles.heatMapGradient}>
+                    <View
+                      style={[
+                        styles.heatMapGradientStep,
+                        { backgroundColor: "rgba(76, 175, 80, 0.3)" },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.heatMapGradientStep,
+                        { backgroundColor: "rgba(255, 193, 7, 0.5)" },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.heatMapGradientStep,
+                        { backgroundColor: "rgba(255, 152, 0, 0.6)" },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.heatMapGradientStep,
+                        { backgroundColor: "rgba(244, 67, 54, 0.7)" },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.heatMapLegendText}>High</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Mold Susceptibility by Fish Type */}
+            {Object.keys(analytics.mold_analysis.by_fish_type).length > 0 && (
+              <>
+                <Text style={styles.chartSubtitle}>
+                  Contamination Rate by Fish Type
+                </Text>
+                <View style={styles.moldByTypeContainer}>
+                  {Object.entries(analytics.mold_analysis.by_fish_type)
+                    .sort(
+                      ([, a], [, b]) =>
+                        b.contamination_rate - a.contamination_rate,
+                    )
+                    .map(([fishType, data]) => (
+                      <View key={fishType} style={styles.moldTypeRow}>
+                        <Text style={styles.moldTypeLabel} numberOfLines={1}>
+                          {fishType}
+                        </Text>
+                        <View style={styles.moldTypeBarContainer}>
+                          <View
+                            style={[
+                              styles.moldTypeBar,
+                              {
+                                width: `${Math.min(data.contamination_rate, 100)}%`,
+                                backgroundColor:
+                                  data.contamination_rate > 30
+                                    ? "#F44336"
+                                    : data.contamination_rate > 15
+                                      ? "#FF9800"
+                                      : data.contamination_rate > 5
+                                        ? "#FFC107"
+                                        : "#4CAF50",
+                              },
+                            ]}
+                          />
+                        </View>
+                        <Text style={styles.moldTypeValue}>
+                          {data.contamination_rate.toFixed(1)}%
+                        </Text>
+                      </View>
+                    ))}
+                </View>
+              </>
+            )}
+          </View>
+        )}
 
         {/* Daily Scans - Line Graph */}
         {Object.keys(analytics.daily_scans).length > 0 && (
@@ -1166,5 +1419,175 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#CCC",
     flex: 1,
+  },
+  // Mold Analysis Styles
+  moldSummaryContainer: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 16,
+  },
+  moldSummaryCard: {
+    flex: 1,
+    backgroundColor: "rgba(244, 67, 54, 0.1)",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(244, 67, 54, 0.3)",
+  },
+  moldSummaryValue: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#F44336",
+  },
+  moldSummaryLabel: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    marginTop: 4,
+  },
+  moldSeverityContainer: {
+    gap: 10,
+    marginBottom: 8,
+  },
+  moldSeverityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  moldSeverityLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: 90,
+    gap: 8,
+  },
+  moldSeverityDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  moldSeverityText: {
+    fontSize: 13,
+    color: theme.colors.text,
+  },
+  moldSeverityBarTrack: {
+    flex: 1,
+    height: 16,
+    backgroundColor: "#2A2A4A",
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  moldSeverityBarFill: {
+    height: "100%",
+    borderRadius: 8,
+  },
+  moldSeverityCount: {
+    width: 30,
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.text,
+    textAlign: "right",
+  },
+  spatialDistributionContainer: {
+    marginBottom: 8,
+  },
+  fishDiagramContainer: {
+    alignItems: "center",
+  },
+  fishDiagram: {
+    flexDirection: "row",
+    width: "100%",
+    height: 100,
+    borderRadius: 12,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  fishZone: {
+    justifyContent: "center",
+    alignItems: "center",
+    borderRightWidth: 1,
+    borderRightColor: "rgba(255,255,255,0.1)",
+  },
+  fishZoneHead: {
+    flex: 1,
+    borderTopLeftRadius: 50,
+    borderBottomLeftRadius: 30,
+  },
+  fishZoneBodyUpper: {
+    flex: 1.5,
+  },
+  fishZoneBelly: {
+    flex: 1.5,
+  },
+  fishZoneTail: {
+    flex: 1,
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 40,
+    borderRightWidth: 0,
+  },
+  fishZoneLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: theme.colors.text,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  fishZoneValue: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: theme.colors.text,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  heatMapLegend: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  heatMapLegendText: {
+    fontSize: 10,
+    color: theme.colors.textSecondary,
+  },
+  heatMapGradient: {
+    flexDirection: "row",
+    height: 12,
+    borderRadius: 6,
+    overflow: "hidden",
+  },
+  heatMapGradientStep: {
+    width: 30,
+    height: "100%",
+  },
+  moldByTypeContainer: {
+    gap: 10,
+  },
+  moldTypeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  moldTypeLabel: {
+    width: 100,
+    fontSize: 12,
+    color: "#CCC",
+  },
+  moldTypeBarContainer: {
+    flex: 1,
+    height: 18,
+    backgroundColor: "#2A2A4A",
+    borderRadius: 9,
+    overflow: "hidden",
+  },
+  moldTypeBar: {
+    height: "100%",
+    borderRadius: 9,
+  },
+  moldTypeValue: {
+    width: 50,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#fff",
+    textAlign: "right",
   },
 });

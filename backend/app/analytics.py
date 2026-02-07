@@ -14,10 +14,11 @@ def log_scan_analytics(
     confidences: list,
     is_daing: bool,
     scan_id: str = None,
-    color_analysis: dict = None
+    color_analysis: dict = None,
+    mold_analysis: dict = None
 ) -> bool:
     """
-    Log scan analytics to MongoDB including color consistency data.
+    Log scan analytics to MongoDB including color consistency and mold data.
     
     Args:
         fish_types: List of detected fish types
@@ -25,6 +26,7 @@ def log_scan_analytics(
         is_daing: Whether daing was detected
         scan_id: Optional ID linking to history entry
         color_analysis: Optional color consistency analysis results
+        mold_analysis: Optional mold detection analysis results
         
     Returns:
         True if successful, False otherwise
@@ -40,7 +42,8 @@ def log_scan_analytics(
             "is_daing": is_daing,
             "detections": [],
             "scan_id": scan_id,
-            "color_analysis": color_analysis or {}
+            "color_analysis": color_analysis or {},
+            "mold_analysis": mold_analysis or {}
         }
         
         if is_daing and fish_types:
@@ -53,7 +56,9 @@ def log_scan_analytics(
         scans_collection.insert_one(scan_data)
         grade = color_analysis.get('quality_grade', 'N/A') if color_analysis else 'N/A'
         score = color_analysis.get('consistency_score', 0) if color_analysis else 0
-        print(f"📊 Analytics logged: {'Daing' if is_daing else 'No Daing'} | Color: {score}% ({grade}) (ID: {scan_id})")
+        mold_severity = mold_analysis.get('overall_severity', 'N/A') if mold_analysis else 'N/A'
+        mold_coverage = mold_analysis.get('avg_coverage_percent', 0) if mold_analysis else 0
+        print(f"📊 Analytics logged: {'Daing' if is_daing else 'No Daing'} | Color: {score}% ({grade}) | Mold: {mold_severity} ({mold_coverage}%) (ID: {scan_id})")
         return True
     except Exception as e:
         print(f"⚠️ Failed to log analytics: {e}")
@@ -109,7 +114,7 @@ def get_analytics_summary() -> dict:
     Get comprehensive analytics summary from MongoDB.
     
     Returns:
-        Analytics summary with totals, distributions, and color consistency data
+        Analytics summary with totals, distributions, color consistency, and mold data
     """
     scans_collection = get_scans_collection()
     
@@ -125,6 +130,17 @@ def get_analytics_summary() -> dict:
         "color_consistency": {
             "average_score": 0,
             "grade_distribution": {"Export": 0, "Local": 0, "Reject": 0},
+            "by_fish_type": {}
+        },
+        "mold_analysis": {
+            "severity_distribution": {"None": 0, "Low": 0, "Moderate": 0, "Severe": 0},
+            "average_coverage": 0,
+            "spatial_zones": {
+                "head": {"fish_affected": 0, "total_patches": 0},
+                "body_upper": {"fish_affected": 0, "total_patches": 0},
+                "belly": {"fish_affected": 0, "total_patches": 0},
+                "tail": {"fish_affected": 0, "total_patches": 0}
+            },
             "by_fish_type": {}
         }
     }
@@ -208,6 +224,82 @@ def get_analytics_summary() -> dict:
             } for item in color_by_type
         }
         
+        # =====================================================
+        # MOLD ANALYSIS AGGREGATION
+        # =====================================================
+        
+        # Mold severity distribution
+        severity_distribution = {"None": 0, "Low": 0, "Moderate": 0, "Severe": 0}
+        for severity in severity_distribution.keys():
+            count = scans_collection.count_documents({
+                "is_daing": True,
+                "mold_analysis.overall_severity": severity
+            })
+            severity_distribution[severity] = count
+        
+        # Average mold coverage
+        pipeline = [
+            {"$match": {"is_daing": True, "mold_analysis.avg_coverage_percent": {"$exists": True}}},
+            {"$group": {
+                "_id": None,
+                "avg_coverage": {"$avg": "$mold_analysis.avg_coverage_percent"},
+                "count": {"$sum": 1}
+            }}
+        ]
+        mold_avg = list(scans_collection.aggregate(pipeline))
+        avg_mold_coverage = round(mold_avg[0]["avg_coverage"], 2) if mold_avg else 0
+        
+        # Spatial zone aggregation
+        spatial_zones = {
+            "head": {"fish_affected": 0, "total_patches": 0},
+            "body_upper": {"fish_affected": 0, "total_patches": 0},
+            "belly": {"fish_affected": 0, "total_patches": 0},
+            "tail": {"fish_affected": 0, "total_patches": 0}
+        }
+        
+        # Get all scans with spatial data
+        scans_with_mold = list(scans_collection.find({
+            "is_daing": True,
+            "mold_analysis.spatial_summary.zones": {"$exists": True}
+        }, {"mold_analysis.spatial_summary.zones": 1}))
+        
+        for scan in scans_with_mold:
+            zones = scan.get("mold_analysis", {}).get("spatial_summary", {}).get("zones", {})
+            for zone_name, zone_data in zones.items():
+                if zone_name in spatial_zones:
+                    patches = zone_data.get("total_patches", 0)
+                    spatial_zones[zone_name]["total_patches"] += patches
+                    if patches > 0:
+                        spatial_zones[zone_name]["fish_affected"] += 1
+        
+        # Mold analysis by fish type
+        pipeline = [
+            {"$match": {"is_daing": True, "mold_analysis.overall_severity": {"$exists": True}}},
+            {"$unwind": "$detections"},
+            {"$group": {
+                "_id": "$detections.fish_type",
+                "total_scans": {"$sum": 1},
+                "contaminated_scans": {
+                    "$sum": {
+                        "$cond": [
+                            {"$ne": ["$mold_analysis.overall_severity", "None"]},
+                            1, 0
+                        ]
+                    }
+                },
+                "avg_coverage": {"$avg": "$mold_analysis.avg_coverage_percent"}
+            }}
+        ]
+        mold_by_type = list(scans_collection.aggregate(pipeline))
+        mold_by_fish_type = {
+            item["_id"]: {
+                "total_scans": item["total_scans"],
+                "contaminated_scans": item["contaminated_scans"],
+                "contamination_rate": round((item["contaminated_scans"] / item["total_scans"]) * 100, 1) if item["total_scans"] > 0 else 0,
+                "avg_coverage": round(item["avg_coverage"] or 0, 2)
+            } for item in mold_by_type
+        }
+        
         return {
             "status": "success",
             "total_scans": total_scans,
@@ -220,6 +312,12 @@ def get_analytics_summary() -> dict:
                 "average_score": avg_color_score,
                 "grade_distribution": grade_distribution,
                 "by_fish_type": color_by_fish_type
+            },
+            "mold_analysis": {
+                "severity_distribution": severity_distribution,
+                "average_coverage": avg_mold_coverage,
+                "spatial_zones": spatial_zones,
+                "by_fish_type": mold_by_fish_type
             }
         }
     

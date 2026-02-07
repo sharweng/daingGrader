@@ -266,17 +266,25 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
     ).toLocaleString();
     const currentIndex = getCurrentIndex();
     const screenWidth = Dimensions.get("window").width;
+    const screenHeight = Dimensions.get("window").height;
 
     const renderFullscreenItem = ({ item }: { item: HistoryEntry }) => (
       <View
         style={{
           width: screenWidth,
+          height: screenHeight - 180, // Account for header and bottom bar
           justifyContent: "center",
           alignItems: "center",
           backgroundColor: theme.colors.background,
         }}
       >
-        <ZoomableImage uri={item.url} style={{ width: screenWidth, flex: 1 }} />
+        <ZoomableImage
+          uri={item.url}
+          style={{
+            width: screenWidth,
+            height: screenHeight - 180,
+          }}
+        />
       </View>
     );
 
@@ -302,6 +310,13 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
           </TouchableOpacity>
         </View>
 
+        {/* Swipe indicator */}
+        <View style={styles.swipeIndicator}>
+          <Text style={styles.swipeIndicatorText}>
+            {currentIndex + 1} / {entries.length} • Swipe to navigate
+          </Text>
+        </View>
+
         <FlatList
           ref={flatListRef}
           data={entries}
@@ -310,20 +325,37 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
-          initialScrollIndex={currentIndex >= 0 ? currentIndex : undefined}
+          initialScrollIndex={currentIndex >= 0 ? currentIndex : 0}
           getItemLayout={(_, index) => ({
             length: screenWidth,
             offset: screenWidth * index,
             index,
           })}
+          onScrollToIndexFailed={(info) => {
+            // Handle scroll failure gracefully
+            setTimeout(() => {
+              flatListRef.current?.scrollToIndex({
+                index: info.index,
+                animated: false,
+              });
+            }, 100);
+          }}
           onMomentumScrollEnd={(event) => {
             const newIndex = Math.round(
               event.nativeEvent.contentOffset.x / screenWidth,
             );
-            if (entries[newIndex]) {
+            if (
+              entries[newIndex] &&
+              entries[newIndex].id !== selectedEntry?.id
+            ) {
               setSelectedEntry(entries[newIndex]);
             }
           }}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ alignItems: "center" }}
+          snapToInterval={screenWidth}
+          snapToAlignment="start"
+          decelerationRate="fast"
         />
 
         <View style={commonStyles.bottomButtonBar}>
@@ -579,5 +611,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.error,
     flexDirection: "row",
     gap: 8,
+  },
+  swipeIndicator: {
+    alignItems: "center",
+    paddingVertical: 8,
+    backgroundColor: theme.colors.backgroundLight,
+  },
+  swipeIndicatorText: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
   },
 });

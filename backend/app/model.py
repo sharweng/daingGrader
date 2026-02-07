@@ -47,13 +47,13 @@ def get_model() -> YOLO:
     return _model
 
 
-def run_inference(img, confidence_threshold: float = 0.8):
+def run_inference(img, confidence_threshold: float = 0.7):
     """
     Run YOLO inference on an image.
     
     Args:
         img: OpenCV image (BGR format)
-        confidence_threshold: Minimum confidence threshold
+        confidence_threshold: Minimum confidence threshold (default: 0.7 / 70%)
         
     Returns:
         tuple: (results, filtered_indices, detected_fish_types, detected_confidences)

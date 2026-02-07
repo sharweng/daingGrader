@@ -134,12 +134,13 @@ def draw_detection_boxes(img: np.ndarray, results, indices: list, model) -> np.n
     return annotated_img
 
 
-def draw_combined_result_image(img: np.ndarray, results, indices: list, model, color_analysis: dict = None) -> np.ndarray:
+def draw_combined_result_image(img: np.ndarray, results, indices: list, model, color_analysis: dict = None, mold_analysis: dict = None) -> np.ndarray:
     """
     Draw a single combined image with:
     - Bounding boxes around detected fish
     - Semi-transparent polygon masks (if available)
     - Color consistency score overlay at bottom
+    - Mold detection overlay with patches highlighted
     
     Args:
         img: Original BGR image
@@ -147,6 +148,7 @@ def draw_combined_result_image(img: np.ndarray, results, indices: list, model, c
         indices: List of detection indices to draw
         model: YOLO model for class names
         color_analysis: Optional color consistency analysis results
+        mold_analysis: Optional mold detection analysis results
         
     Returns:
         Combined annotated image
@@ -212,42 +214,138 @@ def draw_combined_result_image(img: np.ndarray, results, indices: list, model, c
             fish_type = model.names[int(box.cls[0])]
             confidence = float(box.conf[0])
             
-            # Draw bounding box
-            cv2.rectangle(annotated_img, (x1, y1), (x2, y2), color, 3)
+            # Draw bounding box (thicker line)
+            cv2.rectangle(annotated_img, (x1, y1), (x2, y2), color, 4)
             
-            # Label background
+            # Label background - BIGGER FONT
             label = f"{fish_type} {confidence:.0%}"
             font = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = 0.7
-            thickness = 2
+            font_scale = 1.2  # Increased from 0.7
+            thickness = 3     # Increased from 2
             (label_w, label_h), _ = cv2.getTextSize(label, font, font_scale, thickness)
             
-            # Draw label background at top of box
-            cv2.rectangle(annotated_img, (x1, y1 - label_h - 14), (x1 + label_w + 10, y1), color, -1)
-            cv2.putText(annotated_img, label, (x1 + 5, y1 - 7), font, font_scale, (255, 255, 255), thickness)
+            # Draw label background at top of box (larger padding)
+            cv2.rectangle(annotated_img, (x1, y1 - label_h - 20), (x1 + label_w + 16, y1), color, -1)
+            cv2.putText(annotated_img, label, (x1 + 8, y1 - 10), font, font_scale, (255, 255, 255), thickness)
     
-    # STEP 3: Draw color consistency score overlay at bottom (if available)
+    # STEP 3: Draw mold patches if detected (before overlay)
+    if mold_analysis and mold_analysis.get("fish_with_mold", 0) > 0:
+        annotated_img = draw_mold_patches(annotated_img, mold_analysis)
+    
+    # STEP 4: Draw info overlay at bottom
+    overlay_height = 140 if mold_analysis else 90  # Increased height
+    overlay = annotated_img.copy()
+    cv2.rectangle(overlay, (0, h - overlay_height), (w, h), (0, 0, 0), -1)
+    annotated_img = cv2.addWeighted(overlay, 0.7, annotated_img, 0.3, 0)
+    
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    
+    # Draw color consistency info (top row of overlay)
     if color_analysis:
         score = color_analysis.get("consistency_score", 0)
         grade = color_analysis.get("quality_grade", "Unknown")
         
-        # Create semi-transparent overlay bar at bottom
-        overlay_height = 70
-        overlay = annotated_img.copy()
-        cv2.rectangle(overlay, (0, h - overlay_height), (w, h), (0, 0, 0), -1)
-        annotated_img = cv2.addWeighted(overlay, 0.7, annotated_img, 0.3, 0)
-        
-        # Draw combined text
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        
-        # Left side: Color score
+        # Left side: Color score - BIGGER FONT
         score_text = f"Color: {score:.1f}%"
-        cv2.putText(annotated_img, score_text, (20, h - 25), font, 0.8, (255, 255, 255), 2)
+        y_pos = h - 85 if mold_analysis else h - 35
+        cv2.putText(annotated_img, score_text, (20, y_pos), font, 1.1, (255, 255, 255), 3)
         
-        # Right side: Grade badge
+        # Right side: Grade badge - BIGGER FONT
         grade_text = f"Grade: {grade}"
-        (grade_w, _), _ = cv2.getTextSize(grade_text, font, 0.9, 2)
-        cv2.putText(annotated_img, grade_text, (w - grade_w - 20, h - 25), font, 0.9, grade_color, 2)
+        (grade_w, _), _ = cv2.getTextSize(grade_text, font, 1.2, 3)
+        cv2.putText(annotated_img, grade_text, (w - grade_w - 20, y_pos), font, 1.2, grade_color, 3)
+    
+    # Draw mold info (bottom row of overlay)
+    if mold_analysis:
+        severity = mold_analysis.get("overall_severity", "None")
+        coverage = mold_analysis.get("avg_coverage_percent", 0)
+        
+        # Mold severity color
+        if severity == "Severe":
+            mold_color = (80, 80, 255)   # Red (BGR)
+        elif severity == "Moderate":
+            mold_color = (80, 180, 255)  # Orange (BGR)
+        elif severity == "Low":
+            mold_color = (80, 200, 255)  # Yellow (BGR)
+        else:
+            mold_color = (80, 200, 120)  # Green (BGR)
+        
+        # Left side: Mold coverage - BIGGER FONT
+        mold_text = f"Mold: {coverage:.1f}%"
+        cv2.putText(annotated_img, mold_text, (20, h - 30), font, 1.1, (255, 255, 255), 3)
+        
+        # Right side: Severity badge - BIGGER FONT
+        severity_text = f"Mold: {severity}"
+        (severity_w, _), _ = cv2.getTextSize(severity_text, font, 1.2, 3)
+        cv2.putText(annotated_img, severity_text, (w - severity_w - 20, h - 30), font, 1.2, mold_color, 3)
+    
+    return annotated_img
+
+
+def draw_mold_patches(img: np.ndarray, mold_analysis: dict) -> np.ndarray:
+    """
+    Draw mold patches highlighted on the image as filled regions.
+    
+    Uses contour-based drawing for cleaner visualization instead of
+    many small bounding boxes.
+    
+    Args:
+        img: Image to draw on
+        mold_analysis: Mold analysis results with patch coordinates
+        
+    Returns:
+        Image with mold patches highlighted
+    """
+    annotated_img = img.copy()
+    h, w = annotated_img.shape[:2]
+    
+    # Colors for mold visualization
+    mold_fill_color = (80, 80, 255)     # Lighter red for fill (BGR)
+    mold_outline_color = (0, 0, 200)    # Dark red for outline (BGR)
+    
+    fish_results = mold_analysis.get("fish_results", [])
+    
+    for fish_result in fish_results:
+        if not fish_result.get("mold_detected", False):
+            continue
+        
+        # Get mold patch coordinates
+        mold_coords = fish_result.get("mold_mask_coords", [])
+        
+        if not mold_coords:
+            continue
+        
+        # Create a mask from all mold patches for this fish
+        mold_mask = np.zeros((h, w), dtype=np.uint8)
+        
+        for patch in mold_coords:
+            x = patch.get("x", 0)
+            y = patch.get("y", 0)
+            pw = patch.get("width", 0)
+            ph = patch.get("height", 0)
+            
+            if pw > 0 and ph > 0:
+                # Draw filled rectangle on mask
+                cv2.rectangle(mold_mask, (x, y), (x + pw, y + ph), 255, -1)
+        
+        # Merge nearby patches using morphological operations
+        kernel = np.ones((15, 15), np.uint8)
+        mold_mask = cv2.morphologyEx(mold_mask, cv2.MORPH_CLOSE, kernel)
+        
+        # Find contours of merged mold regions
+        contours, _ = cv2.findContours(mold_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Filter to only significant contours
+        significant_contours = [c for c in contours if cv2.contourArea(c) >= 200]
+        
+        if significant_contours:
+            # Draw semi-transparent fill for all mold regions at once
+            overlay = annotated_img.copy()
+            cv2.drawContours(overlay, significant_contours, -1, mold_fill_color, -1)
+            cv2.addWeighted(overlay, 0.4, annotated_img, 0.6, 0, annotated_img)
+            
+            # Draw outline around mold regions (thicker for visibility)
+            cv2.drawContours(annotated_img, significant_contours, -1, mold_outline_color, 3)
     
     return annotated_img
 
