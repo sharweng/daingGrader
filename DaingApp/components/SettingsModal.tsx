@@ -1,5 +1,13 @@
 import React from "react";
-import { View, Text, Modal, TouchableOpacity, TextInput } from "react-native";
+import {
+  View,
+  Text,
+  Modal,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+} from "react-native";
+import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
 import { modalStyles } from "../styles/modal";
 
@@ -7,8 +15,10 @@ interface SettingsModalProps {
   visible: boolean;
   autoSaveDataset: boolean;
   serverBaseUrl: string;
+  confidenceThreshold: number;
   onToggleAutoSaveDataset: () => void;
   onSetServerUrl: (url: string) => void;
+  onSetConfidenceThreshold: (value: number) => void;
   onClose: () => void;
 }
 
@@ -16,8 +26,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   visible,
   autoSaveDataset,
   serverBaseUrl,
+  confidenceThreshold,
   onToggleAutoSaveDataset,
   onSetServerUrl,
+  onSetConfidenceThreshold,
   onClose,
 }) => {
   return (
@@ -55,6 +67,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             Enter your backend server address (e.g., http://192.168.1.5:8000)
           </Text>
 
+          {/* Confidence Threshold Slider */}
+          <View style={styles.sliderSection}>
+            <View style={styles.sliderHeader}>
+              <Text style={modalStyles.inputLabel}>Detection Confidence</Text>
+              <Text style={styles.sliderValue}>
+                {Math.round(confidenceThreshold * 100)}%
+              </Text>
+            </View>
+            <Slider
+              style={styles.slider}
+              minimumValue={0.3}
+              maximumValue={0.95}
+              step={0.05}
+              value={confidenceThreshold}
+              onValueChange={onSetConfidenceThreshold}
+              minimumTrackTintColor="#3B82F6"
+              maximumTrackTintColor="#334155"
+              thumbTintColor="#3B82F6"
+            />
+            <View style={styles.sliderLabels}>
+              <Text style={styles.sliderLabelText}>30%</Text>
+              <Text style={styles.sliderLabelText}>95%</Text>
+            </View>
+          </View>
+
+          <Text style={modalStyles.settingDescription}>
+            Minimum confidence level required to detect fish. Lower values
+            detect more but may include false positives.
+          </Text>
+
           <TouchableOpacity
             style={modalStyles.settingRow}
             onPress={onToggleAutoSaveDataset}
@@ -84,3 +126,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     </Modal>
   );
 };
+
+const styles = StyleSheet.create({
+  sliderSection: {
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  sliderHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  sliderValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#3B82F6",
+  },
+  slider: {
+    width: "100%",
+    height: 40,
+  },
+  sliderLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+  },
+  sliderLabelText: {
+    fontSize: 12,
+    color: "#64748B",
+  },
+});

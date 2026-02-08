@@ -28,6 +28,7 @@ export default function Index() {
   const [showSettings, setShowSettings] = useState(false);
   const [autoSaveDataset, setAutoSaveDataset] = useState(false);
   const [serverBaseUrl, setServerBaseUrl] = useState(DEFAULT_SERVER_BASE_URL);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.7);
   const serverUrls = useMemo(
     () => getServerUrls(serverBaseUrl),
     [serverBaseUrl],
@@ -120,6 +121,7 @@ export default function Index() {
         capturedImage,
         serverUrls.analyze,
         autoSaveDataset,
+        confidenceThreshold,
       );
       setAnalysisResult(result);
     } catch (error) {
@@ -159,8 +161,10 @@ export default function Index() {
           visible={showSettings}
           autoSaveDataset={autoSaveDataset}
           serverBaseUrl={serverBaseUrl}
+          confidenceThreshold={confidenceThreshold}
           onToggleAutoSaveDataset={() => setAutoSaveDataset(!autoSaveDataset)}
           onSetServerUrl={setServerBaseUrl}
+          onSetConfidenceThreshold={setConfidenceThreshold}
           onClose={() => setShowSettings(false)}
         />
       </>

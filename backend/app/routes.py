@@ -31,18 +31,25 @@ router = APIRouter()
 
 
 @router.post("/analyze")
-async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = False):
+async def analyze_fish(
+    file: UploadFile = File(...), 
+    auto_save_dataset: bool = False,
+    confidence_threshold: float = 0.7
+):
     """
     Analyze fish image using AI model with color consistency analysis.
     
     Args:
         file: Uploaded image file
         auto_save_dataset: Whether to auto-save high-confidence images
+        confidence_threshold: Minimum confidence for detection (0.0-1.0, default 0.7 = 70%)
         
     Returns:
         Analysis results with detection info and result image URL
     """
-    print(f"Received an image for AI Analysis... (auto_save_dataset: {auto_save_dataset})")
+    # Clamp confidence threshold between 0.1 and 1.0
+    confidence_threshold = max(0.1, min(1.0, confidence_threshold))
+    print(f"Received an image for AI Analysis... (auto_save_dataset: {auto_save_dataset}, confidence: {confidence_threshold:.0%})")
     
     # 1. READ IMAGE
     contents = await file.read()
@@ -51,7 +58,7 @@ async def analyze_fish(file: UploadFile = File(...), auto_save_dataset: bool = F
     
     # 2. RUN AI INFERENCE
     model = get_model()
-    results, filtered_indices, detected_fish_types, detected_confidences, has_masks = run_inference(img)
+    results, filtered_indices, detected_fish_types, detected_confidences, has_masks = run_inference(img, confidence_threshold)
     
     # Variables for result
     is_daing_detected = False

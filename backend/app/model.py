@@ -59,16 +59,19 @@ def run_inference(img, confidence_threshold: float = 0.7):
         tuple: (results, filtered_indices, detected_fish_types, detected_confidences)
     """
     model = get_model()
-    results = model(img)
+    
+    # Use 1280 image size for better detection accuracy
+    # This matches the training configuration for best.pt
+    results = model(img, imgsz=1280)
     
     boxes = results[0].boxes
     masks = results[0].masks
     
     has_masks = masks is not None and len(masks) > 0
     if has_masks:
-        print("🎭 Segmentation model detected - using polygon masks")
+        print("🎭 Segmentation model detected (1280px) - using polygon masks")
     else:
-        print("📦 Detection model detected - using bounding boxes only")
+        print("📦 Detection model detected (1280px) - using bounding boxes only")
     
     detected_fish_types = []
     detected_confidences = []

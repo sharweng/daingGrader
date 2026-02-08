@@ -42,6 +42,7 @@ export const analyzeFish = async (
   imageUri: string,
   serverUrl: string,
   autoSaveDataset: boolean = false,
+  confidenceThreshold: number = 0.7,
 ): Promise<AnalysisScanResult> => {
   const formData = new FormData();
   // @ts-ignore: React Native FormData requires these specific fields
@@ -51,10 +52,11 @@ export const analyzeFish = async (
     type: "image/jpeg",
   });
 
-  // Add auto_save_dataset flag to request
-  const urlWithParams = autoSaveDataset
-    ? `${serverUrl}?auto_save_dataset=true`
-    : serverUrl;
+  // Build query params
+  const params = new URLSearchParams();
+  if (autoSaveDataset) params.append("auto_save_dataset", "true");
+  params.append("confidence_threshold", confidenceThreshold.toString());
+  const urlWithParams = `${serverUrl}?${params.toString()}`;
 
   try {
     const response = await withRetry(
