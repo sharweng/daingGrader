@@ -3,9 +3,28 @@ import type {
   HistoryEntry,
   AnalyticsSummary,
   AnalysisScanResult,
+  AuthResponse,
+  User,
 } from "../types";
 
 const normalizeUrl = (url: string) => url.trim().replace(/\/+$/, "");
+
+// Auth token storage (will be set by AuthContext)
+let authToken: string | null = null;
+
+export const setAuthToken = (token: string | null) => {
+  authToken = token;
+};
+
+export const getAuthToken = () => authToken;
+
+// Helper to get auth headers
+const getAuthHeaders = () => {
+  if (authToken) {
+    return { Authorization: `Bearer ${authToken}` };
+  }
+  return {};
+};
 
 // Retry helper for network requests
 const withRetry = async <T>(
@@ -62,7 +81,10 @@ export const analyzeFish = async (
     const response = await withRetry(
       () =>
         axios.post<AnalysisScanResult>(urlWithParams, formData, {
-          headers: { "Content-Type": "multipart/form-data" },
+          headers: {
+            "Content-Type": "multipart/form-data",
+            ...getAuthHeaders(),
+          },
           timeout: 30000,
         }),
       3,
@@ -93,6 +115,7 @@ export const fetchHistory = async (
 ): Promise<HistoryEntry[]> => {
   try {
     const response = await axios.get(normalizeUrl(historyUrl), {
+      headers: getAuthHeaders(),
       timeout: 10000, // 10 seconds timeout
     });
     const entries = response.data?.entries;
@@ -113,6 +136,7 @@ export const deleteHistoryEntry = async (
   const base = normalizeUrl(historyUrl);
   const encodedId = encodeURIComponent(entryId);
   await axios.delete(`${base}/${encodedId}`, {
+    headers: getAuthHeaders(),
     timeout: 10000, // 10 seconds timeout
   });
 };
@@ -124,6 +148,7 @@ export const fetchAnalytics = async (
     const response = await axios.get<AnalyticsSummary>(
       normalizeUrl(analyticsUrl),
       {
+        headers: getAuthHeaders(),
         timeout: 10000,
       },
     );
@@ -173,4 +198,145 @@ export const deleteAutoDatasetEntry = async (
   await axios.delete(`${base}/${encodedId}`, {
     timeout: 10000,
   });
+};
+
+// ============================================
+// AUTHENTICATION API
+// ============================================
+
+export const registerUser = async (
+  baseUrl: string,
+  username: string,
+  email: string,
+  password: string,
+): Promise<AuthResponse> => {
+  const formData = new FormData();
+  formData.append("username", username);
+  formData.append("email", email);
+  formData.append("password", password);
+
+  try {
+    const response = await axios.post<AuthResponse>(
+      `${normalizeUrl(baseUrl)}/auth/register`,
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 10000,
+      },
+    );
+    return response.data;
+  } catch (error: any) {
+    if (error.response?.data?.detail) {
+      return { status: "error", message: error.response.data.detail };
+    }
+    return { status: "error", message: error.message || "Registration failed" };
+  }
+};
+
+export const loginUser = async (
+  baseUrl: string,
+  username: string,
+  password: string,
+): Promise<AuthResponse> => {
+  const formData = new FormData();
+  formData.append("username", username);
+  formData.append("password", password);
+
+  try {
+    const response = await axios.post<AuthResponse>(
+      `${normalizeUrl(baseUrl)}/auth/login`,
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 10000,
+      },
+    );
+    return response.data;
+  } catch (error: any) {
+    if (error.response?.data?.detail) {
+      return { status: "error", message: error.response.data.detail };
+    }
+    return { status: "error", message: error.message || "Login failed" };
+  }
+};
+
+export const logoutUser = async (baseUrl: string): Promise<AuthResponse> => {
+  try {
+    const response = await axios.post<AuthResponse>(
+      `${normalizeUrl(baseUrl)}/auth/logout`,
+      null,
+      {
+        headers: getAuthHeaders(),
+        timeout: 10000,
+      },
+    );
+    return response.data;
+  } catch (error: any) {
+    return { status: "error", message: error.message || "Logout failed" };
+  }
+};
+
+export const getCurrentUser = async (
+  baseUrl: string,
+): Promise<AuthResponse> => {
+  try {
+    const response = await axios.get<AuthResponse>(
+      `${normalizeUrl(baseUrl)}/auth/me`,
+      {
+        headers: getAuthHeaders(),
+        timeout: 10000,
+      },
+    );
+    return response.data;
+  } catch (error: any) {
+    return { status: "error", message: "Not authenticated" };
+  }
+};
+
+export const fetchAllHistory = async (
+  baseUrl: string,
+): Promise<HistoryEntry[]> => {
+  try {
+    const response = await axios.get(`${normalizeUrl(baseUrl)}/history/all`, {
+      headers: getAuthHeaders(),
+      timeout: 10000,
+    });
+    const entries = response.data?.entries;
+    if (Array.isArray(entries)) {
+      return entries as HistoryEntry[];
+    }
+    return [];
+  } catch (error: any) {
+    return [];
+  }
+};
+
+export const fetchAllAnalytics = async (
+  baseUrl: string,
+): Promise<AnalyticsSummary> => {
+  try {
+    const response = await axios.get<AnalyticsSummary>(
+      `${normalizeUrl(baseUrl)}/analytics/all`,
+      {
+        headers: getAuthHeaders(),
+        timeout: 10000,
+      },
+    );
+    return response.data;
+  } catch (error: any) {
+    return {
+      status: "error",
+      total_scans: 0,
+      daing_scans: 0,
+      non_daing_scans: 0,
+      fish_type_distribution: {},
+      average_confidence: {},
+      daily_scans: {},
+      color_consistency: {
+        average_score: 0,
+        grade_distribution: { Export: 0, Local: 0, Reject: 0 },
+        by_fish_type: {},
+      },
+    };
+  }
 };

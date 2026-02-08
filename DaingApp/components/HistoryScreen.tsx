@@ -22,19 +22,29 @@ import { Ionicons } from "@expo/vector-icons";
 import { commonStyles, theme } from "../styles/common";
 import { historyStyles } from "../styles/history";
 import { ZoomableImage } from "./ZoomableImage";
-import type { Screen, HistoryEntry } from "../types";
-import { fetchHistory, deleteHistoryEntry } from "../services/api";
+import type { Screen, HistoryEntry, User } from "../types";
+import {
+  fetchHistory,
+  deleteHistoryEntry,
+  fetchAllHistory,
+} from "../services/api";
+
+type HistoryTab = "my" | "all";
 
 interface HistoryScreenProps {
   onNavigate: (screen: Screen) => void;
   historyUrl: string;
+  serverBaseUrl: string;
   initialEntry?: HistoryEntry | null;
+  user?: User | null;
 }
 
 export const HistoryScreen: React.FC<HistoryScreenProps> = ({
   onNavigate,
   historyUrl,
+  serverBaseUrl,
   initialEntry = null,
+  user,
 }) => {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,7 +54,10 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [activeTab, setActiveTab] = useState<HistoryTab>("my");
   const flatListRef = useRef<FlatList>(null);
+
+  const isAdmin = user?.role === "admin";
 
   const NUM_COLUMNS = 3;
 
@@ -102,9 +115,20 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
   }, [entries, chunkEntries]);
 
   const loadHistory = useCallback(async () => {
+    // Don't load history if user is not logged in
+    if (!user) {
+      setEntries([]);
+      return;
+    }
+
     setLoading(true);
     try {
-      const data = await fetchHistory(historyUrl);
+      let data: HistoryEntry[];
+      if (activeTab === "all" && isAdmin) {
+        data = await fetchAllHistory(serverBaseUrl);
+      } else {
+        data = await fetchHistory(historyUrl);
+      }
       setEntries(data);
     } catch (error) {
       Alert.alert(
@@ -114,7 +138,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [historyUrl]);
+  }, [historyUrl, serverBaseUrl, activeTab, isAdmin, user]);
 
   useEffect(() => {
     loadHistory();
@@ -258,6 +282,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
   }, [selectedEntry, entries]);
 
   const showEmpty = !loading && entries.length === 0;
+  const isLoggedIn = !!user;
 
   // If viewing a specific entry, show full-screen view with horizontal swipe
   if (selectedEntry) {
@@ -439,8 +464,86 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
         )}
       </View>
 
+      {/* Tab Bar for Admin Users */}
+      {isAdmin && (
+        <View style={styles.tabBar}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "my" && styles.activeTab]}
+            onPress={() => setActiveTab("my")}
+          >
+            <Ionicons
+              name="person-outline"
+              size={18}
+              color={
+                activeTab === "my"
+                  ? theme.colors.primary
+                  : theme.colors.textMuted
+              }
+            />
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "my" && styles.activeTabText,
+              ]}
+            >
+              My History
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "all" && styles.activeTab]}
+            onPress={() => setActiveTab("all")}
+          >
+            <Ionicons
+              name="people-outline"
+              size={18}
+              color={
+                activeTab === "all"
+                  ? theme.colors.primary
+                  : theme.colors.textMuted
+              }
+            />
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "all" && styles.activeTabText,
+              ]}
+            >
+              All History
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={historyStyles.contentWrapper}>
-        {loading && entries.length === 0 ? (
+        {!isLoggedIn ? (
+          // Not logged in - show login prompt
+          <View style={historyStyles.emptyStateWrapper}>
+            <View style={historyStyles.emptyIcon}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={48}
+                color={theme.colors.textMuted}
+              />
+            </View>
+            <Text style={historyStyles.emptyTitle}>Login to see History</Text>
+            <Text style={historyStyles.emptySubtitle}>
+              Sign in to view and manage your scan history.
+            </Text>
+            <TouchableOpacity
+              style={[
+                commonStyles.refreshButton,
+                { backgroundColor: theme.colors.primary },
+              ]}
+              onPress={() => onNavigate("login")}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="log-in-outline" size={20} color="#fff" />
+              <Text style={[commonStyles.refreshButtonText, { color: "#fff" }]}>
+                Sign In
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : loading && entries.length === 0 ? (
           <View style={historyStyles.loadingCenter}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
             <Text style={historyStyles.loadingText}>Loading History...</Text>
@@ -620,5 +723,34 @@ const styles = StyleSheet.create({
   swipeIndicatorText: {
     fontSize: 12,
     color: theme.colors.textSecondary,
+  },
+  tabBar: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: theme.colors.backgroundLight,
+    gap: 6,
+  },
+  activeTab: {
+    backgroundColor: `${theme.colors.primary}20`,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: theme.colors.textMuted,
+  },
+  activeTabText: {
+    color: theme.colors.primary,
   },
 });

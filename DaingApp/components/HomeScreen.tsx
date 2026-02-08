@@ -1,33 +1,119 @@
-import React from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import React, { useState } from "react";
+import { View, Text, TouchableOpacity, Modal, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { homeStyles } from "../styles/home";
-import type { Screen } from "../types";
+import type { Screen, User } from "../types";
 
 interface HomeScreenProps {
   onNavigate: (screen: Screen) => void;
   onOpenSettings: () => void;
   autoSaveDataset: boolean;
+  user?: User | null;
+  onLogout?: () => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   onNavigate,
   onOpenSettings,
   autoSaveDataset,
+  user,
+  onLogout,
 }) => {
+  const [menuVisible, setMenuVisible] = useState(false);
+
+  const handleMenuOption = (action: () => void) => {
+    setMenuVisible(false);
+    action();
+  };
+
   return (
     <View style={homeStyles.homeContainer}>
       {/* HEADER */}
       <View style={homeStyles.header}>
-        <View style={{ width: 44 }} />
+        {/* User info (compact) */}
+        {user ? (
+          <View style={homeStyles.headerUserInfo}>
+            <View style={homeStyles.headerUserAvatar}>
+              <Ionicons name="person" size={14} color="#fff" />
+            </View>
+            <Text style={homeStyles.headerUserName} numberOfLines={1}>
+              {user.username}
+            </Text>
+          </View>
+        ) : (
+          <View style={{ width: 44 }} />
+        )}
         <Text style={homeStyles.appTitle}>DaingGrader</Text>
         <TouchableOpacity
-          style={homeStyles.settingsButton}
-          onPress={onOpenSettings}
+          style={homeStyles.menuButton}
+          onPress={() => setMenuVisible(true)}
         >
-          <Ionicons name="settings-outline" size={24} color="#94A3B8" />
+          <Ionicons name="menu" size={26} color="#94A3B8" />
         </TouchableOpacity>
       </View>
+
+      {/* HAMBURGER MENU MODAL */}
+      <Modal
+        visible={menuVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setMenuVisible(false)}
+      >
+        <Pressable
+          style={homeStyles.menuOverlay}
+          onPress={() => setMenuVisible(false)}
+        >
+          <View style={homeStyles.menuContainer}>
+            {/* User section */}
+            {user && (
+              <View style={homeStyles.menuUserSection}>
+                <View style={homeStyles.menuUserAvatar}>
+                  <Ionicons name="person" size={20} color="#fff" />
+                </View>
+                <View style={homeStyles.menuUserDetails}>
+                  <Text style={homeStyles.menuUserName}>{user.username}</Text>
+                  <Text style={homeStyles.menuUserRole}>
+                    {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Menu Items */}
+            {user ? (
+              <TouchableOpacity
+                style={homeStyles.menuItem}
+                onPress={() => handleMenuOption(onLogout || (() => {}))}
+              >
+                <Ionicons name="log-out-outline" size={22} color="#EF4444" />
+                <Text style={[homeStyles.menuItemText, { color: "#EF4444" }]}>
+                  Sign Out
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={homeStyles.menuItem}
+                onPress={() => handleMenuOption(() => onNavigate("login"))}
+              >
+                <Ionicons name="log-in-outline" size={22} color="#3B82F6" />
+                <Text style={[homeStyles.menuItemText, { color: "#3B82F6" }]}>
+                  Sign In
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <View style={homeStyles.menuDivider} />
+
+            <TouchableOpacity
+              style={homeStyles.menuItem}
+              onPress={() => handleMenuOption(onOpenSettings)}
+            >
+              <Ionicons name="settings-outline" size={22} color="#94A3B8" />
+              <Text style={homeStyles.menuItemText}>Settings</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
 
       {/* HERO SECTION */}
       <View style={homeStyles.heroSection}>

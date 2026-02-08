@@ -1,5 +1,12 @@
 import { useState, useRef, useMemo, useEffect } from "react";
-import { View, Text, TouchableOpacity, Alert, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+  ActivityIndicator,
+} from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
@@ -10,9 +17,12 @@ import { AnalyticsScreen } from "../components/AnalyticsScreen";
 import { HistoryScreen } from "../components/HistoryScreen";
 import { AutoDatasetScreen } from "../components/AutoDatasetScreen";
 import { SettingsModal } from "../components/SettingsModal";
+import { LoginScreen } from "../components/LoginScreen";
+import { RegisterScreen } from "../components/RegisterScreen";
 import { takePicture } from "../utils/camera";
 import { analyzeFish, fetchHistory } from "../services/api";
 import { DEFAULT_SERVER_BASE_URL, getServerUrls } from "../constants/config";
+import { useAuth } from "../contexts/AuthContext";
 import type { Screen, HistoryEntry, AnalysisScanResult } from "../types";
 
 export default function Index() {
@@ -22,6 +32,15 @@ export default function Index() {
     useState<AnalysisScanResult | null>(null);
   const [loading, setLoading] = useState(false);
   const cameraRef = useRef<CameraView>(null);
+
+  // Auth
+  const {
+    user,
+    isAuthenticated,
+    isLoading: authLoading,
+    logout,
+    restoreSession,
+  } = useAuth();
 
   // Navigation & Settings
   const [currentScreen, setCurrentScreen] = useState<Screen>("home");
@@ -39,6 +58,18 @@ export default function Index() {
     useState<HistoryEntry | null>(null);
   const [viewingFromScan, setViewingFromScan] = useState(false);
 
+  // Restore auth session on app start
+  useEffect(() => {
+    restoreSession(serverBaseUrl);
+  }, []);
+
+  // When server URL changes, re-validate session
+  useEffect(() => {
+    if (isAuthenticated) {
+      restoreSession(serverBaseUrl);
+    }
+  }, [serverBaseUrl]);
+
   // Fetch latest history entry for thumbnail
   useEffect(() => {
     const loadLatestHistory = async () => {
@@ -54,9 +85,34 @@ export default function Index() {
     loadLatestHistory();
   }, [serverUrls.history, analysisResult]); // Refresh when new analysis is done
 
+  // Handle logout
+  const handleLogout = async () => {
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Logout",
+        style: "destructive",
+        onPress: async () => {
+          await logout(serverBaseUrl);
+          setCurrentScreen("home");
+        },
+      },
+    ]);
+  };
+
+  // Show loading screen while restoring auth
+  if (authLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
   // Check camera permissions
   if (!permission) return <View />;
-  if (!permission.granted) {
+  if (!permission.granted && currentScreen === "scan") {
     return (
       <View style={styles.permissionContainer}>
         <View style={styles.permissionCard}>
@@ -149,6 +205,24 @@ export default function Index() {
   // RENDER SCREENS
   // ============================================
 
+  if (currentScreen === "login") {
+    return (
+      <LoginScreen
+        onNavigate={setCurrentScreen}
+        serverBaseUrl={serverBaseUrl}
+      />
+    );
+  }
+
+  if (currentScreen === "register") {
+    return (
+      <RegisterScreen
+        onNavigate={setCurrentScreen}
+        serverBaseUrl={serverBaseUrl}
+      />
+    );
+  }
+
   if (currentScreen === "home") {
     return (
       <>
@@ -156,6 +230,8 @@ export default function Index() {
           onNavigate={setCurrentScreen}
           onOpenSettings={() => setShowSettings(true)}
           autoSaveDataset={autoSaveDataset}
+          user={user}
+          onLogout={handleLogout}
         />
         <SettingsModal
           visible={showSettings}
@@ -176,6 +252,8 @@ export default function Index() {
       <AnalyticsScreen
         onNavigate={setCurrentScreen}
         analyticsUrl={serverUrls.analytics}
+        serverBaseUrl={serverBaseUrl}
+        user={user}
       />
     );
   }
@@ -188,7 +266,9 @@ export default function Index() {
           setCurrentScreen(screen);
         }}
         historyUrl={serverUrls.history}
+        serverBaseUrl={serverBaseUrl}
         initialEntry={viewingFromScan ? latestHistoryEntry : null}
+        user={user}
       />
     );
   }
@@ -221,6 +301,17 @@ export default function Index() {
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: theme.colors.textSecondary,
+  },
   permissionContainer: {
     flex: 1,
     backgroundColor: theme.colors.background,

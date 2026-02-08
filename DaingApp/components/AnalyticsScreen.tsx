@@ -19,14 +19,18 @@ import Svg, {
   Polyline,
 } from "react-native-svg";
 import { commonStyles, theme } from "../styles/common";
-import { fetchAnalytics } from "../services/api";
-import type { Screen, AnalyticsSummary } from "../types";
+import { fetchAnalytics, fetchAllAnalytics } from "../services/api";
+import type { Screen, AnalyticsSummary, User } from "../types";
 
 const screenWidth = Dimensions.get("window").width;
+
+type AnalyticsTab = "my" | "all";
 
 interface AnalyticsScreenProps {
   onNavigate: (screen: Screen) => void;
   analyticsUrl: string;
+  serverBaseUrl: string;
+  user?: User | null;
 }
 
 // Fish type colors for charts
@@ -58,14 +62,30 @@ const getZoneHeatColor = (affected: number, total: number): string => {
 export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
   onNavigate,
   analyticsUrl,
+  serverBaseUrl,
+  user,
 }) => {
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<AnalyticsTab>("my");
+
+  const isLoggedIn = !!user;
+  const isAdmin = user?.role === "admin";
 
   const loadAnalytics = useCallback(async () => {
     try {
-      const data = await fetchAnalytics(analyticsUrl);
+      let data: AnalyticsSummary;
+      // Non-logged-in users always see overall analytics
+      if (!isLoggedIn) {
+        data = await fetchAllAnalytics(serverBaseUrl);
+      } else if (activeTab === "all") {
+        // Logged-in users viewing "Overall" tab
+        data = await fetchAllAnalytics(serverBaseUrl);
+      } else {
+        // Logged-in users viewing "My Analytics" tab
+        data = await fetchAnalytics(analyticsUrl);
+      }
       setAnalytics(data);
     } catch (error) {
       console.error("Failed to load analytics:", error);
@@ -73,7 +93,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
       setLoading(false);
       setRefreshing(false);
     }
-  }, [analyticsUrl]);
+  }, [analyticsUrl, serverBaseUrl, activeTab, isLoggedIn]);
 
   useEffect(() => {
     loadAnalytics();
@@ -184,6 +204,56 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
           <Ionicons name="refresh" size={22} color={theme.colors.text} />
         </TouchableOpacity>
       </View>
+
+      {/* Tab Bar for Logged-in Users */}
+      {isLoggedIn && (
+        <View style={styles.tabBar}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "my" && styles.activeTab]}
+            onPress={() => setActiveTab("my")}
+          >
+            <Ionicons
+              name="person-outline"
+              size={18}
+              color={
+                activeTab === "my"
+                  ? theme.colors.primary
+                  : theme.colors.textMuted
+              }
+            />
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "my" && styles.activeTabText,
+              ]}
+            >
+              My Analytics
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "all" && styles.activeTab]}
+            onPress={() => setActiveTab("all")}
+          >
+            <Ionicons
+              name="globe-outline"
+              size={18}
+              color={
+                activeTab === "all"
+                  ? theme.colors.primary
+                  : theme.colors.textMuted
+              }
+            />
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "all" && styles.activeTabText,
+              ]}
+            >
+              Overall Analytics
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ScrollView
         style={styles.scrollView}
@@ -731,6 +801,348 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
           </View>
         )}
 
+        {/* Defect Pattern Analysis Section */}
+        {analytics.defect_patterns && (
+          <View style={styles.chartContainer}>
+            <Text style={styles.chartTitle}>📊 Defect Pattern Analysis</Text>
+
+            {/* Defect Frequency */}
+            <Text style={styles.chartSubtitle}>Defect Frequency</Text>
+            <View style={styles.defectFrequencyContainer}>
+              {Object.entries(analytics.defect_patterns.frequency).map(
+                ([defect, count]) => {
+                  const totalAffected = Object.values(
+                    analytics.defect_patterns!.frequency,
+                  ).reduce((a, b) => a + b, 0);
+                  const percentage =
+                    totalAffected > 0
+                      ? (count / analytics.daing_scans) * 100
+                      : 0;
+                  const defectLabels: Record<string, string> = {
+                    poor_color_uniformity: "Poor Color Uniformity",
+                    color_discoloration: "Color Discoloration",
+                    acceptable_quality: "Acceptable (Local Grade)",
+                  };
+                  const defectColors: Record<string, string> = {
+                    poor_color_uniformity: "#FF9800",
+                    color_discoloration: "#F44336",
+                    acceptable_quality: "#FFC107",
+                  };
+
+                  return (
+                    <View key={defect} style={styles.defectRow}>
+                      <View style={styles.defectLabelContainer}>
+                        <View
+                          style={[
+                            styles.defectDot,
+                            { backgroundColor: defectColors[defect] || "#888" },
+                          ]}
+                        />
+                        <Text style={styles.defectLabel}>
+                          {defectLabels[defect] || defect}
+                        </Text>
+                      </View>
+                      <View style={styles.defectBarTrack}>
+                        <View
+                          style={[
+                            styles.defectBarFill,
+                            {
+                              width: `${Math.min(percentage, 100)}%`,
+                              backgroundColor: defectColors[defect] || "#888",
+                            },
+                          ]}
+                        />
+                      </View>
+                      <Text style={styles.defectValue}>
+                        {count} ({percentage.toFixed(1)}%)
+                      </Text>
+                    </View>
+                  );
+                },
+              )}
+            </View>
+
+            {/* Most Common Defect */}
+            {analytics.defect_patterns.most_common_defect && (
+              <View style={styles.mostCommonDefect}>
+                <Ionicons name="warning-outline" size={18} color="#FF9800" />
+                <Text style={styles.mostCommonDefectText}>
+                  Most Common Issue:{" "}
+                  <Text style={styles.mostCommonDefectHighlight}>
+                    {analytics.defect_patterns.most_common_defect
+                      .replace(/_/g, " ")
+                      .replace(/\b\w/g, (l) => l.toUpperCase())}
+                  </Text>
+                </Text>
+              </View>
+            )}
+
+            {/* Species Susceptibility */}
+            {Object.keys(analytics.defect_patterns.species_susceptibility)
+              .length > 0 && (
+              <>
+                <Text style={styles.chartSubtitle}>
+                  Species Most Susceptible to Defects
+                </Text>
+                <View style={styles.speciesSusceptibilityContainer}>
+                  {Object.entries(
+                    analytics.defect_patterns.species_susceptibility,
+                  )
+                    .sort(([, a], [, b]) => b.defect_rate - a.defect_rate)
+                    .slice(0, 5)
+                    .map(([fishType, data]) => (
+                      <View key={fishType} style={styles.susceptibilityRow}>
+                        <View style={styles.susceptibilityInfo}>
+                          <Text style={styles.susceptibilityFishType}>
+                            {fishType}
+                          </Text>
+                          <Text style={styles.susceptibilityStats}>
+                            {data.reject_count} reject, {data.local_count} local
+                          </Text>
+                        </View>
+                        <View style={styles.susceptibilityBarContainer}>
+                          <View
+                            style={[
+                              styles.susceptibilityBar,
+                              {
+                                width: `${Math.min(data.defect_rate, 100)}%`,
+                                backgroundColor:
+                                  data.defect_rate > 50
+                                    ? "#F44336"
+                                    : data.defect_rate > 25
+                                      ? "#FF9800"
+                                      : "#FFC107",
+                              },
+                            ]}
+                          />
+                        </View>
+                        <Text style={styles.susceptibilityRate}>
+                          {data.defect_rate.toFixed(1)}%
+                        </Text>
+                      </View>
+                    ))}
+                </View>
+              </>
+            )}
+          </View>
+        )}
+
+        {/* Quality Grade Classification */}
+        {analytics.quality_classification && (
+          <View style={styles.chartContainer}>
+            <Text style={styles.chartTitle}>
+              🏆 Quality Grade Classification
+            </Text>
+
+            {/* Quality Summary Cards */}
+            <View style={styles.qualitySummaryContainer}>
+              <View
+                style={[
+                  styles.qualitySummaryCard,
+                  { backgroundColor: "rgba(76, 175, 80, 0.15)" },
+                ]}
+              >
+                <Text
+                  style={[styles.qualitySummaryValue, { color: "#4CAF50" }]}
+                >
+                  {analytics.quality_classification.summary.export_rate.toFixed(
+                    1,
+                  )}
+                  %
+                </Text>
+                <Text style={styles.qualitySummaryLabel}>Export Grade</Text>
+              </View>
+              <View
+                style={[
+                  styles.qualitySummaryCard,
+                  { backgroundColor: "rgba(255, 193, 7, 0.15)" },
+                ]}
+              >
+                <Text
+                  style={[styles.qualitySummaryValue, { color: "#FFC107" }]}
+                >
+                  {analytics.quality_classification.summary.local_rate.toFixed(
+                    1,
+                  )}
+                  %
+                </Text>
+                <Text style={styles.qualitySummaryLabel}>Local Grade</Text>
+              </View>
+              <View
+                style={[
+                  styles.qualitySummaryCard,
+                  { backgroundColor: "rgba(244, 67, 54, 0.15)" },
+                ]}
+              >
+                <Text
+                  style={[styles.qualitySummaryValue, { color: "#F44336" }]}
+                >
+                  {analytics.quality_classification.summary.reject_rate.toFixed(
+                    1,
+                  )}
+                  %
+                </Text>
+                <Text style={styles.qualitySummaryLabel}>Reject</Text>
+              </View>
+            </View>
+
+            {/* Quality by Species */}
+            {Object.keys(analytics.quality_classification.by_species).length >
+              0 && (
+              <>
+                <Text style={styles.chartSubtitle}>
+                  Quality by Fish Species
+                </Text>
+                <View style={styles.qualityBySpeciesContainer}>
+                  {Object.entries(
+                    analytics.quality_classification.by_species,
+                  ).map(([fishType, grades]) => {
+                    const total =
+                      grades.Export.count +
+                      grades.Local.count +
+                      grades.Reject.count;
+                    if (total === 0) return null;
+
+                    return (
+                      <View key={fishType} style={styles.qualitySpeciesRow}>
+                        <Text style={styles.qualitySpeciesName}>
+                          {fishType}
+                        </Text>
+                        <View style={styles.qualityStackedBar}>
+                          {grades.Export.count > 0 && (
+                            <View
+                              style={[
+                                styles.qualityStackedSegment,
+                                {
+                                  width: `${(grades.Export.count / total) * 100}%`,
+                                  backgroundColor: "#4CAF50",
+                                },
+                              ]}
+                            />
+                          )}
+                          {grades.Local.count > 0 && (
+                            <View
+                              style={[
+                                styles.qualityStackedSegment,
+                                {
+                                  width: `${(grades.Local.count / total) * 100}%`,
+                                  backgroundColor: "#FFC107",
+                                },
+                              ]}
+                            />
+                          )}
+                          {grades.Reject.count > 0 && (
+                            <View
+                              style={[
+                                styles.qualityStackedSegment,
+                                {
+                                  width: `${(grades.Reject.count / total) * 100}%`,
+                                  backgroundColor: "#F44336",
+                                },
+                              ]}
+                            />
+                          )}
+                        </View>
+                        <Text style={styles.qualitySpeciesCount}>{total}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                {/* Stacked bar legend */}
+                <View style={styles.qualityLegend}>
+                  <View style={styles.qualityLegendItem}>
+                    <View
+                      style={[
+                        styles.qualityLegendDot,
+                        { backgroundColor: "#4CAF50" },
+                      ]}
+                    />
+                    <Text style={styles.qualityLegendText}>Export</Text>
+                  </View>
+                  <View style={styles.qualityLegendItem}>
+                    <View
+                      style={[
+                        styles.qualityLegendDot,
+                        { backgroundColor: "#FFC107" },
+                      ]}
+                    />
+                    <Text style={styles.qualityLegendText}>Local</Text>
+                  </View>
+                  <View style={styles.qualityLegendItem}>
+                    <View
+                      style={[
+                        styles.qualityLegendDot,
+                        { backgroundColor: "#F44336" },
+                      ]}
+                    />
+                    <Text style={styles.qualityLegendText}>Reject</Text>
+                  </View>
+                </View>
+              </>
+            )}
+
+            {/* Quality by Date Chart */}
+            {Object.keys(analytics.quality_classification.by_date).length >
+              0 && (
+              <>
+                <Text style={styles.chartSubtitle}>
+                  Quality Trend (Last 7 Days)
+                </Text>
+                <View style={styles.qualityTrendContainer}>
+                  {Object.entries(analytics.quality_classification.by_date)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([date, grades]) => {
+                      const total =
+                        grades.Export + grades.Local + grades.Reject;
+                      const formattedDate = new Date(date).toLocaleDateString(
+                        "en",
+                        { month: "short", day: "numeric" },
+                      );
+
+                      return (
+                        <View key={date} style={styles.qualityTrendDay}>
+                          <View style={styles.qualityTrendBars}>
+                            <View
+                              style={[
+                                styles.qualityTrendBar,
+                                {
+                                  height: `${(grades.Export / Math.max(total, 1)) * 100}%`,
+                                  backgroundColor: "#4CAF50",
+                                },
+                              ]}
+                            />
+                            <View
+                              style={[
+                                styles.qualityTrendBar,
+                                {
+                                  height: `${(grades.Local / Math.max(total, 1)) * 100}%`,
+                                  backgroundColor: "#FFC107",
+                                },
+                              ]}
+                            />
+                            <View
+                              style={[
+                                styles.qualityTrendBar,
+                                {
+                                  height: `${(grades.Reject / Math.max(total, 1)) * 100}%`,
+                                  backgroundColor: "#F44336",
+                                },
+                              ]}
+                            />
+                          </View>
+                          <Text style={styles.qualityTrendDate}>
+                            {formattedDate}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                </View>
+              </>
+            )}
+          </View>
+        )}
+
         {/* Daily Scans - Line Graph */}
         {Object.keys(analytics.daily_scans).length > 0 && (
           <View style={styles.chartContainer}>
@@ -1031,6 +1443,35 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.backgroundLight,
     justifyContent: "center",
     alignItems: "center",
+  },
+  tabBar: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: theme.colors.backgroundLight,
+    gap: 6,
+  },
+  activeTab: {
+    backgroundColor: `${theme.colors.primary}20`,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: theme.colors.textMuted,
+  },
+  activeTabText: {
+    color: theme.colors.primary,
   },
   scrollView: {
     flex: 1,
@@ -1589,5 +2030,209 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#fff",
     textAlign: "right",
+  },
+  // Defect Pattern Analysis Styles
+  defectFrequencyContainer: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  defectRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  defectLabelContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: 140,
+    gap: 8,
+  },
+  defectDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  defectLabel: {
+    fontSize: 12,
+    color: "#CCC",
+    flex: 1,
+  },
+  defectBarTrack: {
+    flex: 1,
+    height: 16,
+    backgroundColor: "#2A2A4A",
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  defectBarFill: {
+    height: "100%",
+    borderRadius: 8,
+  },
+  defectValue: {
+    width: 80,
+    fontSize: 12,
+    color: "#fff",
+    textAlign: "right",
+  },
+  mostCommonDefect: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 152, 0, 0.1)",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255, 152, 0, 0.3)",
+  },
+  mostCommonDefectText: {
+    fontSize: 13,
+    color: theme.colors.text,
+    flex: 1,
+  },
+  mostCommonDefectHighlight: {
+    fontWeight: "600",
+    color: "#FF9800",
+  },
+  speciesSusceptibilityContainer: {
+    gap: 10,
+  },
+  susceptibilityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  susceptibilityInfo: {
+    width: 110,
+  },
+  susceptibilityFishType: {
+    fontSize: 12,
+    color: theme.colors.text,
+    fontWeight: "600",
+  },
+  susceptibilityStats: {
+    fontSize: 10,
+    color: theme.colors.textSecondary,
+  },
+  susceptibilityBarContainer: {
+    flex: 1,
+    height: 16,
+    backgroundColor: "#2A2A4A",
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  susceptibilityBar: {
+    height: "100%",
+    borderRadius: 8,
+  },
+  susceptibilityRate: {
+    width: 45,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#fff",
+    textAlign: "right",
+  },
+  // Quality Grade Classification Styles
+  qualitySummaryContainer: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  qualitySummaryCard: {
+    flex: 1,
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  qualitySummaryValue: {
+    fontSize: 22,
+    fontWeight: "bold",
+  },
+  qualitySummaryLabel: {
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  qualityBySpeciesContainer: {
+    gap: 10,
+    marginBottom: 12,
+  },
+  qualitySpeciesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  qualitySpeciesName: {
+    width: 100,
+    fontSize: 12,
+    color: theme.colors.text,
+  },
+  qualityStackedBar: {
+    flex: 1,
+    height: 18,
+    flexDirection: "row",
+    backgroundColor: "#2A2A4A",
+    borderRadius: 9,
+    overflow: "hidden",
+  },
+  qualityStackedSegment: {
+    height: "100%",
+  },
+  qualitySpeciesCount: {
+    width: 30,
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    textAlign: "right",
+  },
+  qualityLegend: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 16,
+    marginBottom: 16,
+  },
+  qualityLegendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  qualityLegendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  qualityLegendText: {
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+  },
+  qualityTrendContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    height: 100,
+    alignItems: "flex-end",
+    gap: 4,
+  },
+  qualityTrendDay: {
+    flex: 1,
+    alignItems: "center",
+  },
+  qualityTrendBars: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    height: 70,
+    gap: 2,
+  },
+  qualityTrendBar: {
+    width: 8,
+    borderRadius: 4,
+    minHeight: 2,
+  },
+  qualityTrendDate: {
+    fontSize: 9,
+    color: theme.colors.textSecondary,
+    marginTop: 6,
+    textAlign: "center",
   },
 });

@@ -10,7 +10,13 @@ export const getServerUrls = (baseUrl: string) => {
   return {
     analyze: `${normalized}/analyze`,
     history: `${normalized}/history`,
+    historyAll: `${normalized}/history/all`,
     analytics: `${normalized}/analytics/summary`,
+    analyticsAll: `${normalized}/analytics/all`,
     autoDataset: `${normalized}/auto-dataset`,
+    authRegister: `${normalized}/auth/register`,
+    authLogin: `${normalized}/auth/login`,
+    authLogout: `${normalized}/auth/logout`,
+    authMe: `${normalized}/auth/me`,
   } as const;
 };

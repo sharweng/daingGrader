@@ -17,7 +17,7 @@ def add_history_entry(entry: dict) -> bool:
     Add a history entry to MongoDB.
     
     Args:
-        entry: dict with id, timestamp, url, folder
+        entry: dict with id, timestamp, url, folder, user_id (optional)
         
     Returns:
         True if successful, False otherwise
@@ -32,7 +32,8 @@ def add_history_entry(entry: dict) -> bool:
             "id": entry["id"],
             "timestamp": datetime.fromisoformat(entry["timestamp"]),
             "url": entry["url"],
-            "folder": entry.get("folder", "")
+            "folder": entry.get("folder", ""),
+            "user_id": entry.get("user_id")  # Can be None for unauthenticated scans
         }
         history_collection.insert_one(entry_doc)
         print(f"📚 History saved to MongoDB: {entry['id']}")
@@ -62,6 +63,61 @@ def get_history_entries() -> list:
         return entries
     except Exception as e:
         print(f"⚠️ Failed to get history from MongoDB: {e}")
+        return []
+
+
+def get_user_history_entries(user_id: str) -> list:
+    """
+    Get history entries for a specific user from MongoDB.
+    
+    Args:
+        user_id: The user's ID
+        
+    Returns:
+        List of history entries for the user
+    """
+    history_collection = get_history_collection()
+    if history_collection is None:
+        return []
+    
+    try:
+        entries = list(history_collection.find(
+            {"user_id": user_id}, 
+            {"_id": 0}
+        ).sort("timestamp", -1).limit(200))
+        
+        # Convert datetime back to ISO string for JSON response
+        for entry in entries:
+            if isinstance(entry.get("timestamp"), datetime):
+                entry["timestamp"] = entry["timestamp"].isoformat()
+        return entries
+    except Exception as e:
+        print(f"⚠️ Failed to get user history from MongoDB: {e}")
+        return []
+
+
+def get_all_history_entries() -> list:
+    """
+    Get all history entries from MongoDB (for admin view).
+    Includes user_id field to identify which user made each scan.
+    
+    Returns:
+        List of all history entries
+    """
+    history_collection = get_history_collection()
+    if history_collection is None:
+        return []
+    
+    try:
+        entries = list(history_collection.find({}, {"_id": 0}).sort("timestamp", -1).limit(500))
+        
+        # Convert datetime back to ISO string for JSON response
+        for entry in entries:
+            if isinstance(entry.get("timestamp"), datetime):
+                entry["timestamp"] = entry["timestamp"].isoformat()
+        return entries
+    except Exception as e:
+        print(f"⚠️ Failed to get all history from MongoDB: {e}")
         return []
 
 

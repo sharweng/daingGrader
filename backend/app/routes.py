@@ -8,7 +8,8 @@ import io
 import cv2
 import numpy as np
 from datetime import datetime
-from fastapi import APIRouter, UploadFile, File, Form
+from typing import Optional
+from fastapi import APIRouter, UploadFile, File, Form, Header, HTTPException
 from starlette.responses import StreamingResponse
 import cloudinary
 import cloudinary.uploader
@@ -22,19 +23,88 @@ from .history import (
     remove_history_entry,
     fetch_history_from_cloudinary,
     get_history_entries,
+    get_user_history_entries,
+    get_all_history_entries,
     cleanup_empty_cloudinary_folder
 )
-from .analytics import log_scan_analytics, delete_analytics_by_scan_id, get_analytics_summary
+from .analytics import log_scan_analytics, delete_analytics_by_scan_id, get_analytics_summary, get_user_analytics_summary
 from .dataset import fetch_auto_dataset, delete_auto_dataset_entry, save_to_auto_dataset
+from .auth import (
+    register_user,
+    login_user,
+    logout_user,
+    validate_session,
+    get_user_by_id
+)
 
 router = APIRouter()
+
+
+# ============================================
+# AUTHENTICATION ROUTES
+# ============================================
+
+@router.post("/auth/register")
+async def register(
+    username: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...)
+):
+    """Register a new user."""
+    result = register_user(username, email, password)
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
+
+
+@router.post("/auth/login")
+async def login(
+    username: str = Form(...),
+    password: str = Form(...)
+):
+    """Login user."""
+    result = login_user(username, password)
+    if result["status"] == "error":
+        raise HTTPException(status_code=401, detail=result["message"])
+    return result
+
+
+@router.post("/auth/logout")
+async def logout(authorization: Optional[str] = Header(None)):
+    """Logout user."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    token = authorization.replace("Bearer ", "")
+    result = logout_user(token)
+    return result
+
+
+@router.get("/auth/me")
+async def get_current_user(authorization: Optional[str] = Header(None)):
+    """Get current authenticated user info."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    token = authorization.replace("Bearer ", "")
+    session = validate_session(token)
+    
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    
+    user = get_user_by_id(session["user_id"])
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {"status": "success", "user": user}
 
 
 @router.post("/analyze")
 async def analyze_fish(
     file: UploadFile = File(...), 
     auto_save_dataset: bool = False,
-    confidence_threshold: float = 0.7
+    confidence_threshold: float = 0.7,
+    authorization: Optional[str] = Header(None)
 ):
     """
     Analyze fish image using AI model with color consistency analysis.
@@ -43,10 +113,18 @@ async def analyze_fish(
         file: Uploaded image file
         auto_save_dataset: Whether to auto-save high-confidence images
         confidence_threshold: Minimum confidence for detection (0.0-1.0, default 0.7 = 70%)
+        authorization: Optional auth token for user tracking
         
     Returns:
         Analysis results with detection info and result image URL
     """
+    # Extract user_id from authorization token if provided
+    user_id = None
+    if authorization:
+        token = authorization.replace("Bearer ", "")
+        session = validate_session(token)
+        if session:
+            user_id = session["user_id"]
     # Clamp confidence threshold between 0.1 and 1.0
     confidence_threshold = max(0.1, min(1.0, confidence_threshold))
     print(f"Received an image for AI Analysis... (auto_save_dataset: {auto_save_dataset}, confidence: {confidence_threshold:.0%})")
@@ -122,9 +200,10 @@ async def analyze_fish(
             "id": history_id,
             "timestamp": now.isoformat(),
             "url": result_url,
-            "folder": history_folder
+            "folder": history_folder,
+            "user_id": user_id
         })
-        print(f"📚 History saved: {history_folder}/{history_id}")
+        print(f"📚 History saved: {history_folder}/{history_id}" + (f" (user: {user_id})" if user_id else ""))
         
         # 5. LOG ANALYTICS
         log_scan_analytics(
@@ -133,7 +212,8 @@ async def analyze_fish(
             is_daing_detected,
             scan_id=history_id,
             color_analysis=color_analysis,
-            mold_analysis=mold_analysis
+            mold_analysis=mold_analysis,
+            user_id=user_id
         )
         
         # 6. AUTO-SAVE HIGH-CONFIDENCE IMAGES
@@ -204,14 +284,55 @@ async def upload_dataset(
 
 
 @router.get("/history")
-def get_history():
-    """Fetch history from Cloudinary directly."""
+async def get_history(authorization: Optional[str] = Header(None)):
+    """
+    Fetch user's history. If authenticated, returns user's own history.
+    If not authenticated, returns all history (for backward compatibility).
+    """
     try:
-        entries = fetch_history_from_cloudinary()
+        user_id = None
+        if authorization:
+            token = authorization.replace("Bearer ", "")
+            session = validate_session(token)
+            if session:
+                user_id = session["user_id"]
+        
+        if user_id:
+            # Return user's own history from MongoDB
+            entries = get_user_history_entries(user_id)
+        else:
+            # Fallback to all history from Cloudinary for unauthenticated users
+            entries = fetch_history_from_cloudinary()
+        
         return {"status": "success", "entries": entries}
     except Exception as e:
-        print(f"⚠️ Failed to fetch from Cloudinary: {e}")
-        return {"status": "success", "entries": get_history_entries()}
+        print(f"⚠️ Failed to fetch history: {e}")
+        return {"status": "success", "entries": []}
+
+
+@router.get("/history/all")
+async def get_all_history(authorization: Optional[str] = Header(None)):
+    """
+    Fetch all history (admin only).
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    token = authorization.replace("Bearer ", "")
+    session = validate_session(token)
+    
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    
+    if session["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        entries = get_all_history_entries()
+        return {"status": "success", "entries": entries}
+    except Exception as e:
+        print(f"⚠️ Failed to fetch all history: {e}")
+        return {"status": "success", "entries": []}
 
 
 @router.delete("/history/{entry_id}")
@@ -266,8 +387,36 @@ def delete_history(entry_id: str):
 
 
 @router.get("/analytics/summary")
-async def analytics_summary():
-    """Get analytics summary."""
+async def analytics_summary(authorization: Optional[str] = Header(None)):
+    """
+    Get analytics summary. If authenticated, returns user's own analytics.
+    If not authenticated, returns all analytics (for backward compatibility).
+    """
+    user_id = None
+    if authorization:
+        token = authorization.replace("Bearer ", "")
+        session = validate_session(token)
+        if session:
+            user_id = session["user_id"]
+    
+    if user_id:
+        return get_user_analytics_summary(user_id)
+    return get_analytics_summary()
+
+
+@router.get("/analytics/all")
+async def all_analytics_summary(authorization: Optional[str] = Header(None)):
+    """
+    Get all analytics summary (for authenticated users or public access).
+    Non-authenticated users can also access overall analytics.
+    """
+    # Allow access without authentication - public overall analytics
+    # If authorization is provided, validate it but don't require it
+    if authorization:
+        token = authorization.replace("Bearer ", "")
+        session = validate_session(token)
+        # Token provided but invalid - still allow access to public data
+    
     return get_analytics_summary()
 
 
