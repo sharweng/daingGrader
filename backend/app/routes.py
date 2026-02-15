@@ -389,11 +389,22 @@ def delete_history(entry_id: str):
 
 
 @router.get("/analytics/summary")
-async def analytics_summary(authorization: Optional[str] = Header(None)):
+async def analytics_summary(
+    days: int = 7,
+    authorization: Optional[str] = Header(None)
+):
     """
     Get analytics summary. If authenticated, returns user's own analytics.
     If not authenticated, returns all analytics (for backward compatibility).
+    
+    Args:
+        days: Number of days for time-based analytics (7, 30, 90, or 365)
     """
+    # Validate days parameter
+    valid_days = [7, 30, 90, 365]
+    if days not in valid_days:
+        days = 7
+    
     user_id = None
     if authorization:
         token = authorization.replace("Bearer ", "")
@@ -402,16 +413,27 @@ async def analytics_summary(authorization: Optional[str] = Header(None)):
             user_id = session["user_id"]
     
     if user_id:
-        return get_user_analytics_summary(user_id)
-    return get_analytics_summary()
+        return get_user_analytics_summary(user_id, days)
+    return get_analytics_summary(days)
 
 
 @router.get("/analytics/all")
-async def all_analytics_summary(authorization: Optional[str] = Header(None)):
+async def all_analytics_summary(
+    days: int = 7,
+    authorization: Optional[str] = Header(None)
+):
     """
     Get all analytics summary (for authenticated users or public access).
     Non-authenticated users can also access overall analytics.
+    
+    Args:
+        days: Number of days for time-based analytics (7, 30, 90, or 365)
     """
+    # Validate days parameter
+    valid_days = [7, 30, 90, 365]
+    if days not in valid_days:
+        days = 7
+    
     # Allow access without authentication - public overall analytics
     # If authorization is provided, validate it but don't require it
     if authorization:
@@ -419,7 +441,7 @@ async def all_analytics_summary(authorization: Optional[str] = Header(None)):
         session = validate_session(token)
         # Token provided but invalid - still allow access to public data
     
-    return get_analytics_summary()
+    return get_analytics_summary(days)
 
 
 @router.get("/auto-dataset")

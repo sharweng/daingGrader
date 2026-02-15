@@ -145,15 +145,14 @@ export const deleteHistoryEntry = async (
 
 export const fetchAnalytics = async (
   analyticsUrl: string,
+  days: number = 7,
 ): Promise<AnalyticsSummary> => {
   try {
-    const response = await axios.get<AnalyticsSummary>(
-      normalizeUrl(analyticsUrl),
-      {
-        headers: getAuthHeaders(),
-        timeout: 10000,
-      },
-    );
+    const url = `${normalizeUrl(analyticsUrl)}?days=${days}`;
+    const response = await axios.get<AnalyticsSummary>(url, {
+      headers: getAuthHeaders(),
+      timeout: 10000,
+    });
     return response.data;
   } catch (error: any) {
     // Return empty analytics on error
@@ -315,10 +314,11 @@ export const fetchAllHistory = async (
 
 export const fetchAllAnalytics = async (
   baseUrl: string,
+  days: number = 7,
 ): Promise<AnalyticsSummary> => {
   try {
     const response = await axios.get<AnalyticsSummary>(
-      `${normalizeUrl(baseUrl)}/analytics/all`,
+      `${normalizeUrl(baseUrl)}/analytics/all?days=${days}`,
       {
         headers: getAuthHeaders(),
         timeout: 10000,

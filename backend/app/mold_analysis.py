@@ -315,15 +315,14 @@ def preprocess_for_mold_detection(img: np.ndarray, mask: np.ndarray) -> np.ndarr
 
 def create_anatomical_zones(mask: np.ndarray, keypoints: Dict, orientation: Dict) -> Dict[str, np.ndarray]:
     """
-    Create anatomical zone masks based on fish keypoints.
+    Create spatial zone masks for split fish (daing na hati sa gitna).
     
     Zones:
-    - head: Region around snout to gill (front 25%)
-    - body_upper: Dorsal region (top middle 50%)
-    - belly: Ventral region (bottom middle 50%)
-    - tail: Caudal region (rear 25%)
+    - top: Upper half of the fish
+    - bottom: Lower half of the fish
     
-    The zones are adjusted based on fish orientation (flipped, rotated).
+    These zones are suitable for split dried fish where the traditional
+    head/body/belly/tail zones don't apply.
     """
     h, w = mask.shape
     bbox = keypoints.get("bounding_box")
@@ -333,46 +332,19 @@ def create_anatomical_zones(mask: np.ndarray, keypoints: Dict, orientation: Dict
         return create_simple_zones(mask)
     
     x, y, bw, bh = bbox["x"], bbox["y"], bbox["w"], bbox["h"]
-    head_side = orientation.get("head_side", "left")
-    is_flipped = orientation.get("is_flipped", False)
     
-    # Initialize zone masks
+    # Initialize zone masks - using top/bottom for split fish
     zones = {
-        "head": np.zeros((h, w), dtype=np.uint8),
-        "body_upper": np.zeros((h, w), dtype=np.uint8),
-        "belly": np.zeros((h, w), dtype=np.uint8),
-        "tail": np.zeros((h, w), dtype=np.uint8)
+        "top": np.zeros((h, w), dtype=np.uint8),
+        "bottom": np.zeros((h, w), dtype=np.uint8)
     }
     
-    # Define zone boundaries based on head direction
-    if head_side == "left":
-        # Head on left
-        head_x1, head_x2 = x, x + int(bw * 0.25)
-        body_x1, body_x2 = x + int(bw * 0.25), x + int(bw * 0.75)
-        tail_x1, tail_x2 = x + int(bw * 0.75), x + bw
-    else:
-        # Head on right
-        tail_x1, tail_x2 = x, x + int(bw * 0.25)
-        body_x1, body_x2 = x + int(bw * 0.25), x + int(bw * 0.75)
-        head_x1, head_x2 = x + int(bw * 0.75), x + bw
-    
-    # Define dorsal/ventral split
+    # Split at the middle horizontally (top and bottom halves)
     mid_y = y + bh // 2
     
-    if is_flipped:
-        # Belly on top
-        upper_y1, upper_y2 = y + int(bh * 0.5), y + bh  # Actually dorsal when flipped
-        belly_y1, belly_y2 = y, y + int(bh * 0.5)  # Actually belly when flipped
-    else:
-        # Normal orientation (belly on bottom)
-        upper_y1, upper_y2 = y, y + int(bh * 0.5)
-        belly_y1, belly_y2 = y + int(bh * 0.5), y + bh
-    
-    # Create zone masks
-    zones["head"][y:y+bh, head_x1:head_x2] = 255
-    zones["tail"][y:y+bh, tail_x1:tail_x2] = 255
-    zones["body_upper"][upper_y1:upper_y2, body_x1:body_x2] = 255
-    zones["belly"][belly_y1:belly_y2, body_x1:body_x2] = 255
+    # Create zone masks - simple top/bottom split
+    zones["top"][y:mid_y, x:x+bw] = 255
+    zones["bottom"][mid_y:y+bh, x:x+bw] = 255
     
     # Apply fish mask to all zones
     for zone_name in zones:
@@ -382,28 +354,25 @@ def create_anatomical_zones(mask: np.ndarray, keypoints: Dict, orientation: Dict
 
 
 def create_simple_zones(mask: np.ndarray) -> Dict[str, np.ndarray]:
-    """Fallback: create simple rectangular zones."""
+    """Fallback: create simple top/bottom zones for split fish."""
     h, w = mask.shape
     
     # Find fish bounding box
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
-        return {name: np.zeros((h, w), dtype=np.uint8) for name in ["head", "body_upper", "belly", "tail"]}
+        return {name: np.zeros((h, w), dtype=np.uint8) for name in ["top", "bottom"]}
     
     x, y, bw, bh = cv2.boundingRect(max(contours, key=cv2.contourArea))
     
     zones = {
-        "head": np.zeros((h, w), dtype=np.uint8),
-        "body_upper": np.zeros((h, w), dtype=np.uint8),
-        "belly": np.zeros((h, w), dtype=np.uint8),
-        "tail": np.zeros((h, w), dtype=np.uint8)
+        "top": np.zeros((h, w), dtype=np.uint8),
+        "bottom": np.zeros((h, w), dtype=np.uint8)
     }
     
-    # Simple left-to-right, top-to-bottom division
-    zones["head"][y:y+bh, x:x+int(bw*0.25)] = 255
-    zones["tail"][y:y+bh, x+int(bw*0.75):x+bw] = 255
-    zones["body_upper"][y:y+int(bh*0.5), x+int(bw*0.25):x+int(bw*0.75)] = 255
-    zones["belly"][y+int(bh*0.5):y+bh, x+int(bw*0.25):x+int(bw*0.75)] = 255
+    # Simple top/bottom split
+    mid_y = y + bh // 2
+    zones["top"][y:mid_y, x:x+bw] = 255
+    zones["bottom"][mid_y:y+bh, x:x+bw] = 255
     
     for zone_name in zones:
         zones[zone_name] = cv2.bitwise_and(zones[zone_name], mask * 255)
@@ -586,10 +555,10 @@ def analyze_mold_with_masks(img: np.ndarray, masks, boxes) -> Dict:
     segmentation masks for precise fish region detection.
     """
     if masks is None or len(masks) == 0:
-        print("📦 No masks available, using bounding box fallback")
+        print("No masks available, using bounding box fallback")
         return analyze_mold_with_boxes(img, boxes)
     
-    print("🦠 Analyzing mold using segmentation masks (v2)")
+    print("Analyzing mold using segmentation masks (v2)")
     
     fish_results = []
     h, w = img.shape[:2]
@@ -613,7 +582,7 @@ def analyze_mold_with_masks(img: np.ndarray, masks, boxes) -> Dict:
                 fish_results.append(mold_info)
             
         except Exception as e:
-            print(f"⚠️ Error analyzing fish {i}: {e}")
+            print(f"Error analyzing fish {i}: {e}")
             import traceback
             traceback.print_exc()
             continue
@@ -628,7 +597,7 @@ def analyze_mold_with_boxes(img: np.ndarray, boxes) -> Dict:
     if boxes is None or len(boxes) == 0:
         return create_empty_mold_result()
     
-    print("📦 Using bounding boxes for mold detection")
+    print("Using bounding boxes for mold detection")
     
     fish_results = []
     h, w = img.shape[:2]

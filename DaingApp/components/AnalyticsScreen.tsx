@@ -33,16 +33,25 @@ interface AnalyticsScreenProps {
   user?: User | null;
 }
 
-// Fish type colors for charts
+// Fish type colors for charts - distinct colors for each type
 const FISH_COLORS: Record<string, string> = {
-  DalagangBukid: "#FF6B6B",
-  Tunsoy: "#4ECDC4",
-  Galunggong: "#45B7D1",
-  Espada: "#96CEB4",
-  Pusit: "#FFEAA7",
-  Danggit: "#DDA0DD",
-  Bangus: "#98D8C8",
-  default: "#A0AEC0",
+  DalagangBukid: "#FF6B6B", // Red
+  Tunsoy: "#4ECDC4", // Teal
+  Galunggong: "#3498DB", // Blue
+  Espada: "#2ECC71", // Green
+  Pusit: "#9B59B6", // Purple
+  Danggit: "#E67E22", // Orange
+  Bangus: "#1ABC9C", // Turquoise
+  Bisugo: "#F1C40F", // Yellow
+  FlyingFish: "#E91E63", // Pink
+  "Flying Fish": "#E91E63", // Pink (alternative name)
+  Tilapia: "#00BCD4", // Cyan
+  Dilis: "#8BC34A", // Light Green
+  Tamban: "#FF5722", // Deep Orange
+  Alumahan: "#673AB7", // Deep Purple
+  Salay: "#795548", // Brown
+  Matambaka: "#607D8B", // Blue Grey
+  default: "#A0AEC0", // Grey
 };
 
 const getColor = (fishType: string): string => {
@@ -69,22 +78,30 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<AnalyticsTab>("my");
+  const [selectedDays, setSelectedDays] = useState<number>(7);
 
   const isLoggedIn = !!user;
   const isAdmin = user?.role === "admin";
+
+  const timeRangeOptions = [
+    { value: 7, label: "7 Days" },
+    { value: 30, label: "30 Days" },
+    { value: 90, label: "90 Days" },
+    { value: 365, label: "1 Year" },
+  ];
 
   const loadAnalytics = useCallback(async () => {
     try {
       let data: AnalyticsSummary;
       // Non-logged-in users always see overall analytics
       if (!isLoggedIn) {
-        data = await fetchAllAnalytics(serverBaseUrl);
+        data = await fetchAllAnalytics(serverBaseUrl, selectedDays);
       } else if (activeTab === "all") {
         // Logged-in users viewing "Overall" tab
-        data = await fetchAllAnalytics(serverBaseUrl);
+        data = await fetchAllAnalytics(serverBaseUrl, selectedDays);
       } else {
         // Logged-in users viewing "My Analytics" tab
-        data = await fetchAnalytics(analyticsUrl);
+        data = await fetchAnalytics(analyticsUrl, selectedDays);
       }
       setAnalytics(data);
     } catch (error) {
@@ -93,7 +110,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
       setLoading(false);
       setRefreshing(false);
     }
-  }, [analyticsUrl, serverBaseUrl, activeTab, isLoggedIn]);
+  }, [analyticsUrl, serverBaseUrl, activeTab, isLoggedIn, selectedDays]);
 
   useEffect(() => {
     loadAnalytics();
@@ -254,6 +271,36 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Time Range Selector */}
+      <View style={styles.timeRangeContainer}>
+        <Text style={styles.timeRangeLabel}>Time Range:</Text>
+        <View style={styles.timeRangeButtons}>
+          {timeRangeOptions.map((option) => (
+            <TouchableOpacity
+              key={option.value}
+              style={[
+                styles.timeRangeButton,
+                selectedDays === option.value && styles.timeRangeButtonActive,
+              ]}
+              onPress={() => {
+                setSelectedDays(option.value);
+                setLoading(true);
+              }}
+            >
+              <Text
+                style={[
+                  styles.timeRangeButtonText,
+                  selectedDays === option.value &&
+                    styles.timeRangeButtonTextActive,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
 
       <ScrollView
         style={styles.scrollView}
@@ -561,9 +608,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
         {/* Mold Analysis Section */}
         {analytics.mold_analysis && (
           <View style={styles.chartContainer}>
-            <Text style={styles.chartTitle}>
-              🦠 Mold Contamination Analysis
-            </Text>
+            <Text style={styles.chartTitle}>Mold Contamination Analysis</Text>
 
             {/* Mold Summary Stats */}
             <View style={styles.moldSummaryContainer}>
@@ -634,89 +679,49 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
 
             {/* Spatial Distribution - Heat Map Style */}
             <Text style={styles.chartSubtitle}>
-              Spatial Distribution (Most Affected Areas)
+              Spatial Distribution (Split Fish)
             </Text>
             <View style={styles.spatialDistributionContainer}>
               <View style={styles.fishDiagramContainer}>
-                {/* Fish body outline representation */}
-                <View style={styles.fishDiagram}>
-                  {/* Head zone */}
+                {/* Split fish representation - Top and Bottom */}
+                <View style={styles.splitFishDiagram}>
+                  {/* Top zone */}
                   <View
                     style={[
-                      styles.fishZone,
-                      styles.fishZoneHead,
+                      styles.splitFishZone,
+                      styles.splitFishZoneTop,
                       {
                         backgroundColor: getZoneHeatColor(
-                          analytics.mold_analysis.spatial_zones.head
+                          analytics.mold_analysis.spatial_zones.top
                             ?.fish_affected || 0,
                           analytics.total_scans,
                         ),
                       },
                     ]}
                   >
-                    <Text style={styles.fishZoneLabel}>Head</Text>
+                    <Text style={styles.fishZoneLabel}>Top Half</Text>
                     <Text style={styles.fishZoneValue}>
-                      {analytics.mold_analysis.spatial_zones.head
+                      {analytics.mold_analysis.spatial_zones.top
                         ?.fish_affected || 0}
                     </Text>
                   </View>
-                  {/* Body upper zone */}
+                  {/* Bottom zone */}
                   <View
                     style={[
-                      styles.fishZone,
-                      styles.fishZoneBodyUpper,
+                      styles.splitFishZone,
+                      styles.splitFishZoneBottom,
                       {
                         backgroundColor: getZoneHeatColor(
-                          analytics.mold_analysis.spatial_zones.body_upper
+                          analytics.mold_analysis.spatial_zones.bottom
                             ?.fish_affected || 0,
                           analytics.total_scans,
                         ),
                       },
                     ]}
                   >
-                    <Text style={styles.fishZoneLabel}>Body</Text>
+                    <Text style={styles.fishZoneLabel}>Bottom Half</Text>
                     <Text style={styles.fishZoneValue}>
-                      {analytics.mold_analysis.spatial_zones.body_upper
-                        ?.fish_affected || 0}
-                    </Text>
-                  </View>
-                  {/* Belly zone */}
-                  <View
-                    style={[
-                      styles.fishZone,
-                      styles.fishZoneBelly,
-                      {
-                        backgroundColor: getZoneHeatColor(
-                          analytics.mold_analysis.spatial_zones.belly
-                            ?.fish_affected || 0,
-                          analytics.total_scans,
-                        ),
-                      },
-                    ]}
-                  >
-                    <Text style={styles.fishZoneLabel}>Belly</Text>
-                    <Text style={styles.fishZoneValue}>
-                      {analytics.mold_analysis.spatial_zones.belly
-                        ?.fish_affected || 0}
-                    </Text>
-                  </View>
-                  {/* Tail zone */}
-                  <View
-                    style={[
-                      styles.fishZone,
-                      styles.fishZoneTail,
-                      {
-                        backgroundColor: getZoneHeatColor(
-                          analytics.mold_analysis.spatial_zones.tail
-                            ?.fish_affected || 0,
-                          analytics.total_scans,
-                        ),
-                      },
-                    ]}
-                  >
-                    <Text style={styles.fishZoneLabel}>Tail</Text>
-                    <Text style={styles.fishZoneValue}>
-                      {analytics.mold_analysis.spatial_zones.tail
+                      {analytics.mold_analysis.spatial_zones.bottom
                         ?.fish_affected || 0}
                     </Text>
                   </View>
@@ -804,7 +809,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
         {/* Defect Pattern Analysis Section */}
         {analytics.defect_patterns && (
           <View style={styles.chartContainer}>
-            <Text style={styles.chartTitle}>📊 Defect Pattern Analysis</Text>
+            <Text style={styles.chartTitle}>Defect Pattern Analysis</Text>
 
             {/* Defect Frequency */}
             <Text style={styles.chartSubtitle}>Defect Frequency</Text>
@@ -930,9 +935,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
         {/* Quality Grade Classification */}
         {analytics.quality_classification && (
           <View style={styles.chartContainer}>
-            <Text style={styles.chartTitle}>
-              🏆 Quality Grade Classification
-            </Text>
+            <Text style={styles.chartTitle}>Quality Grade Classification</Text>
 
             {/* Quality Summary Cards */}
             <View style={styles.qualitySummaryContainer}>
@@ -1087,7 +1090,10 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
               0 && (
               <>
                 <Text style={styles.chartSubtitle}>
-                  Quality Trend (Last 7 Days)
+                  Quality Trend (
+                  {timeRangeOptions.find((o) => o.value === selectedDays)
+                    ?.label || "7 Days"}
+                  )
                 </Text>
                 <View style={styles.qualityTrendContainer}>
                   {Object.entries(analytics.quality_classification.by_date)
@@ -1143,11 +1149,214 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
           </View>
         )}
 
+        {/* Confidence vs Color Score Scatter Plot */}
+        {analytics.quality_classification &&
+          Object.keys(analytics.quality_classification.by_species).length >
+            0 && (
+            <View style={styles.chartContainer}>
+              <Text style={styles.chartTitle}>
+                Confidence vs Color Score Distribution
+              </Text>
+              {(() => {
+                const chartWidth = screenWidth - 80;
+                const chartHeight = 200;
+                const padding = { left: 35, right: 15, top: 15, bottom: 30 };
+                const graphWidth = chartWidth - padding.left - padding.right;
+                const graphHeight = chartHeight - padding.top - padding.bottom;
+
+                // Collect data points - one per fish type per grade (Export/Local/Reject)
+                const dataPoints: Array<{
+                  fishType: string;
+                  confidence: number;
+                  colorScore: number;
+                  grade: string;
+                }> = [];
+
+                // Get unique fish types for legend
+                const fishTypes = new Set<string>();
+
+                Object.entries(
+                  analytics.quality_classification.by_species,
+                ).forEach(([fishType, grades]) => {
+                  fishTypes.add(fishType);
+                  // Add Export grade point
+                  if (
+                    grades.Export.count > 0 &&
+                    grades.Export.avg_confidence > 0
+                  ) {
+                    dataPoints.push({
+                      fishType,
+                      confidence: grades.Export.avg_confidence,
+                      colorScore: grades.Export.avg_color_score,
+                      grade: "Export",
+                    });
+                  }
+                  // Add Local grade point
+                  if (
+                    grades.Local.count > 0 &&
+                    grades.Local.avg_confidence > 0
+                  ) {
+                    dataPoints.push({
+                      fishType,
+                      confidence: grades.Local.avg_confidence,
+                      colorScore: grades.Local.avg_color_score,
+                      grade: "Local",
+                    });
+                  }
+                  // Add Reject grade point
+                  if (
+                    grades.Reject.count > 0 &&
+                    grades.Reject.avg_confidence > 0
+                  ) {
+                    dataPoints.push({
+                      fishType,
+                      confidence: grades.Reject.avg_confidence,
+                      colorScore: grades.Reject.avg_color_score,
+                      grade: "Reject",
+                    });
+                  }
+                });
+
+                if (dataPoints.length === 0) return null;
+
+                return (
+                  <View style={styles.scatterPlotContainer}>
+                    <Svg width={chartWidth} height={chartHeight}>
+                      {/* Grid lines - horizontal */}
+                      {[0, 25, 50, 75, 100].map((yVal) => {
+                        const y =
+                          padding.top +
+                          graphHeight -
+                          (yVal / 100) * graphHeight;
+                        return (
+                          <G key={`h-grid-${yVal}`}>
+                            <Line
+                              x1={padding.left}
+                              y1={y}
+                              x2={chartWidth - padding.right}
+                              y2={y}
+                              stroke="#2A2A4A"
+                              strokeWidth="1"
+                            />
+                            <SvgText
+                              x={padding.left - 5}
+                              y={y + 3}
+                              textAnchor="end"
+                              fontSize="9"
+                              fill="#888888"
+                            >
+                              {yVal}
+                            </SvgText>
+                          </G>
+                        );
+                      })}
+
+                      {/* Grid lines - vertical */}
+                      {[0.5, 0.6, 0.7, 0.8, 0.9, 1.0].map((xVal) => {
+                        const x =
+                          padding.left + ((xVal - 0.5) / 0.5) * graphWidth;
+                        return (
+                          <G key={`v-grid-${xVal}`}>
+                            <Line
+                              x1={x}
+                              y1={padding.top}
+                              x2={x}
+                              y2={padding.top + graphHeight}
+                              stroke="#2A2A4A"
+                              strokeWidth="1"
+                            />
+                            <SvgText
+                              x={x}
+                              y={chartHeight - 5}
+                              textAnchor="middle"
+                              fontSize="9"
+                              fill="#888888"
+                            >
+                              {(xVal * 100).toFixed(0)}%
+                            </SvgText>
+                          </G>
+                        );
+                      })}
+
+                      {/* Axis labels */}
+                      <SvgText
+                        x={chartWidth / 2}
+                        y={chartHeight - 1}
+                        textAnchor="middle"
+                        fontSize="10"
+                        fill="#AAAAAA"
+                      >
+                        Detection Confidence
+                      </SvgText>
+
+                      {/* Data points - fixed size, colored by fish type */}
+                      {dataPoints.map((point, index) => {
+                        const x =
+                          padding.left +
+                          ((point.confidence - 0.5) / 0.5) * graphWidth;
+                        const y =
+                          padding.top +
+                          graphHeight -
+                          (point.colorScore / 100) * graphHeight;
+                        const color = getColor(point.fishType);
+
+                        return (
+                          <G key={`point-${index}`}>
+                            <Circle
+                              cx={Math.max(
+                                padding.left,
+                                Math.min(x, chartWidth - padding.right),
+                              )}
+                              cy={Math.max(
+                                padding.top,
+                                Math.min(y, padding.top + graphHeight),
+                              )}
+                              r={6}
+                              fill={color}
+                              opacity={0.85}
+                              stroke="#FFFFFF"
+                              strokeWidth={1}
+                            />
+                          </G>
+                        );
+                      })}
+                    </Svg>
+
+                    {/* Y-axis label */}
+                    <Text style={styles.scatterYLabel}>Color Score</Text>
+
+                    {/* Legend - fish types */}
+                    <View style={styles.scatterLegend}>
+                      {Array.from(
+                        new Set(dataPoints.map((p) => p.fishType)),
+                      ).map((fishType) => (
+                        <View key={fishType} style={styles.scatterLegendItem}>
+                          <View
+                            style={[
+                              styles.scatterLegendDot,
+                              { backgroundColor: getColor(fishType) },
+                            ]}
+                          />
+                          <Text style={styles.scatterLegendText}>
+                            {fishType}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                );
+              })()}
+            </View>
+          )}
+
         {/* Daily Scans - Line Graph */}
         {Object.keys(analytics.daily_scans).length > 0 && (
           <View style={styles.chartContainer}>
             <Text style={styles.chartTitle}>
-              Daily Scans Trend (Last 7 Days)
+              Daily Scans Trend (
+              {timeRangeOptions.find((o) => o.value === selectedDays)?.label ||
+                "7 Days"}
+              )
             </Text>
             {(() => {
               const dailyEntries = Object.entries(analytics.daily_scans).sort(
@@ -1443,6 +1652,44 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.backgroundLight,
     justifyContent: "center",
     alignItems: "center",
+  },
+  // Time Range Selector Styles
+  timeRangeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  timeRangeLabel: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    fontWeight: "500",
+  },
+  timeRangeButtons: {
+    flex: 1,
+    flexDirection: "row",
+    gap: 6,
+  },
+  timeRangeButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: theme.colors.backgroundLight,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  timeRangeButtonActive: {
+    backgroundColor: `${theme.colors.primary}20`,
+    borderColor: theme.colors.primary,
+  },
+  timeRangeButtonText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: theme.colors.textMuted,
+  },
+  timeRangeButtonTextActive: {
+    color: theme.colors.primary,
   },
   tabBar: {
     flexDirection: "row",
@@ -1813,6 +2060,43 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
+  // Scatter Plot Styles
+  scatterPlotContainer: {
+    position: "relative",
+    marginTop: 10,
+  },
+  scatterYLabel: {
+    position: "absolute",
+    left: 0,
+    top: "40%",
+    fontSize: 10,
+    color: "#AAAAAA",
+    transform: [{ rotate: "-90deg" }],
+    width: 80,
+    textAlign: "center",
+  },
+  scatterLegend: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 8,
+    flexWrap: "wrap",
+  },
+  scatterLegendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  scatterLegendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  scatterLegendText: {
+    fontSize: 10,
+    color: theme.colors.textSecondary,
+  },
   // Line Chart Styles
   lineChartContainer: {
     position: "relative",
@@ -1934,6 +2218,31 @@ const styles = StyleSheet.create({
   fishDiagramContainer: {
     alignItems: "center",
   },
+  // Split fish diagram for daing na hati sa gitna
+  splitFishDiagram: {
+    flexDirection: "column",
+    width: "100%",
+    borderRadius: 12,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  splitFishZone: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.2)",
+  },
+  splitFishZoneTop: {
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  splitFishZoneBottom: {
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    borderBottomWidth: 0,
+  },
+  // Legacy horizontal fish diagram (kept for reference)
   fishDiagram: {
     flexDirection: "row",
     width: "100%",

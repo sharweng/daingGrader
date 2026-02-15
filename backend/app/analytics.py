@@ -61,10 +61,10 @@ def log_scan_analytics(
         score = color_analysis.get('consistency_score', 0) if color_analysis else 0
         mold_severity = mold_analysis.get('overall_severity', 'N/A') if mold_analysis else 'N/A'
         mold_coverage = mold_analysis.get('avg_coverage_percent', 0) if mold_analysis else 0
-        print(f"📊 Analytics logged: {'Daing' if is_daing else 'No Daing'} | Color: {score}% ({grade}) | Mold: {mold_severity} ({mold_coverage}%) (ID: {scan_id})")
+        print(f"Analytics logged: {'Daing' if is_daing else 'No Daing'} | Color: {score}% ({grade}) | Mold: {mold_severity} ({mold_coverage}%) (ID: {scan_id})")
         return True
     except Exception as e:
-        print(f"⚠️ Failed to log analytics: {e}")
+        print(f"Failed to log analytics: {e}")
         return False
 
 
@@ -86,7 +86,7 @@ def delete_analytics_by_scan_id(scan_id: str) -> bool:
         # First try to delete by scan_id (new method)
         result = scans_collection.delete_one({"scan_id": scan_id})
         if result.deleted_count > 0:
-            print(f"📊 Deleted analytics record for {scan_id}")
+            print(f"Deleted analytics record for {scan_id}")
             return True
         
         # Fallback: try by timestamp parsing (for old records)
@@ -102,19 +102,22 @@ def delete_analytics_by_scan_id(scan_id: str) -> bool:
             "timestamp": {"$gte": start_time, "$lte": end_time}
         })
         if result.deleted_count > 0:
-            print(f"📊 Deleted analytics record for {scan_id} (by timestamp)")
+            print(f"Deleted analytics record for {scan_id} (by timestamp)")
             return True
         
-        print(f"⚠️ No analytics record found for {scan_id}")
+        print(f"No analytics record found for {scan_id}")
         return False
     except Exception as e:
         print(f"⚠️ Failed to delete analytics: {e}")
         return False
 
 
-def get_analytics_summary() -> dict:
+def get_analytics_summary(days: int = 7) -> dict:
     """
     Get comprehensive analytics summary from MongoDB.
+    
+    Args:
+        days: Number of days for time-based analytics (default: 7)
     
     Returns:
         Analytics summary with totals, distributions, color consistency, and mold data
@@ -139,10 +142,8 @@ def get_analytics_summary() -> dict:
             "severity_distribution": {"None": 0, "Low": 0, "Moderate": 0, "Severe": 0},
             "average_coverage": 0,
             "spatial_zones": {
-                "head": {"fish_affected": 0, "total_patches": 0},
-                "body_upper": {"fish_affected": 0, "total_patches": 0},
-                "belly": {"fish_affected": 0, "total_patches": 0},
-                "tail": {"fish_affected": 0, "total_patches": 0}
+                "top": {"fish_affected": 0, "total_patches": 0},
+                "bottom": {"fish_affected": 0, "total_patches": 0}
             },
             "by_fish_type": {}
         }
@@ -175,10 +176,10 @@ def get_analytics_summary() -> dict:
         avg_conf = list(scans_collection.aggregate(pipeline))
         average_confidence = {item["_id"]: round(item["avg_conf"], 4) for item in avg_conf}
         
-        # Daily scans (last 7 days)
-        seven_days_ago = datetime.now() - timedelta(days=7)
+        # Daily scans (configurable time range)
+        time_cutoff = datetime.now() - timedelta(days=days)
         pipeline = [
-            {"$match": {"timestamp": {"$gte": seven_days_ago}}},
+            {"$match": {"timestamp": {"$gte": time_cutoff}}},
             {"$group": {
                 "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$timestamp"}},
                 "count": {"$sum": 1}
@@ -252,12 +253,10 @@ def get_analytics_summary() -> dict:
         mold_avg = list(scans_collection.aggregate(pipeline))
         avg_mold_coverage = round(mold_avg[0]["avg_coverage"], 2) if mold_avg else 0
         
-        # Spatial zone aggregation
+        # Spatial zone aggregation (top/bottom for split fish)
         spatial_zones = {
-            "head": {"fish_affected": 0, "total_patches": 0},
-            "body_upper": {"fish_affected": 0, "total_patches": 0},
-            "belly": {"fish_affected": 0, "total_patches": 0},
-            "tail": {"fish_affected": 0, "total_patches": 0}
+            "top": {"fish_affected": 0, "total_patches": 0},
+            "bottom": {"fish_affected": 0, "total_patches": 0}
         }
         
         # Get all scans with spatial data
@@ -407,11 +406,11 @@ def get_analytics_summary() -> dict:
                 "avg_color_score": round(item["avg_color_score"], 1)
             }
         
-        # Quality classification by date (last 7 days)
+        # Quality classification by date (configurable time range)
         pipeline = [
             {"$match": {
                 "is_daing": True,
-                "timestamp": {"$gte": seven_days_ago},
+                "timestamp": {"$gte": time_cutoff},
                 "color_analysis.quality_grade": {"$exists": True}
             }},
             {"$group": {
@@ -470,19 +469,20 @@ def get_analytics_summary() -> dict:
         }
     
     except Exception as e:
-        print(f"❌ Analytics error: {e}")
+        print(f"Analytics error: {e}")
         import traceback
         traceback.print_exc()
         empty_response["message"] = str(e)
         return empty_response
 
 
-def get_user_analytics_summary(user_id: str) -> dict:
+def get_user_analytics_summary(user_id: str, days: int = 7) -> dict:
     """
     Get analytics summary for a specific user from MongoDB.
     
     Args:
         user_id: The user's ID
+        days: Number of days for time-based analytics (default: 7)
         
     Returns:
         Analytics summary for the user with totals, distributions, color consistency, and mold data
@@ -507,10 +507,8 @@ def get_user_analytics_summary(user_id: str) -> dict:
             "severity_distribution": {"None": 0, "Low": 0, "Moderate": 0, "Severe": 0},
             "average_coverage": 0,
             "spatial_zones": {
-                "head": {"fish_affected": 0, "total_patches": 0},
-                "body_upper": {"fish_affected": 0, "total_patches": 0},
-                "belly": {"fish_affected": 0, "total_patches": 0},
-                "tail": {"fish_affected": 0, "total_patches": 0}
+                "top": {"fish_affected": 0, "total_patches": 0},
+                "bottom": {"fish_affected": 0, "total_patches": 0}
             },
             "by_fish_type": {}
         }
@@ -546,10 +544,10 @@ def get_user_analytics_summary(user_id: str) -> dict:
         avg_conf = list(scans_collection.aggregate(pipeline))
         average_confidence = {item["_id"]: round(item["avg_conf"], 4) for item in avg_conf}
         
-        # Daily scans (last 7 days)
-        seven_days_ago = datetime.now() - timedelta(days=7)
+        # Daily scans (configurable time range)
+        time_cutoff = datetime.now() - timedelta(days=days)
         pipeline = [
-            {"$match": {**user_filter, "timestamp": {"$gte": seven_days_ago}}},
+            {"$match": {**user_filter, "timestamp": {"$gte": time_cutoff}}},
             {"$group": {
                 "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$timestamp"}},
                 "count": {"$sum": 1}
@@ -621,12 +619,10 @@ def get_user_analytics_summary(user_id: str) -> dict:
         mold_avg = list(scans_collection.aggregate(pipeline))
         avg_mold_coverage = round(mold_avg[0]["avg_coverage"], 2) if mold_avg else 0
         
-        # Spatial zone aggregation
+        # Spatial zone aggregation (top/bottom for split fish)
         spatial_zones = {
-            "head": {"fish_affected": 0, "total_patches": 0},
-            "body_upper": {"fish_affected": 0, "total_patches": 0},
-            "belly": {"fish_affected": 0, "total_patches": 0},
-            "tail": {"fish_affected": 0, "total_patches": 0}
+            "top": {"fish_affected": 0, "total_patches": 0},
+            "bottom": {"fish_affected": 0, "total_patches": 0}
         }
         
         scans_with_mold = list(scans_collection.find({
@@ -772,12 +768,12 @@ def get_user_analytics_summary(user_id: str) -> dict:
                 "avg_color_score": round(item["avg_color_score"], 1)
             }
         
-        # Quality by date for user
+        # Quality by date for user (configurable time range)
         pipeline = [
             {"$match": {
                 **user_filter,
                 "is_daing": True,
-                "timestamp": {"$gte": seven_days_ago},
+                "timestamp": {"$gte": time_cutoff},
                 "color_analysis.quality_grade": {"$exists": True}
             }},
             {"$group": {
@@ -835,7 +831,7 @@ def get_user_analytics_summary(user_id: str) -> dict:
         }
     
     except Exception as e:
-        print(f"❌ User analytics error: {e}")
+        print(f"User analytics error: {e}")
         import traceback
         traceback.print_exc()
         empty_response["message"] = str(e)
