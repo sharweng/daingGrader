@@ -62,6 +62,7 @@ export const analyzeFish = async (
   serverUrl: string,
   autoSaveDataset: boolean = false,
   confidenceThreshold: number = 0.7,
+  hideColorOverlay: boolean = true,
 ): Promise<AnalysisScanResult> => {
   const formData = new FormData();
   // @ts-ignore: React Native FormData requires these specific fields
@@ -75,6 +76,7 @@ export const analyzeFish = async (
   const params = new URLSearchParams();
   if (autoSaveDataset) params.append("auto_save_dataset", "true");
   params.append("confidence_threshold", confidenceThreshold.toString());
+  params.append("hide_color_overlay", hideColorOverlay ? "true" : "false");
   const urlWithParams = `${serverUrl}?${params.toString()}`;
 
   try {

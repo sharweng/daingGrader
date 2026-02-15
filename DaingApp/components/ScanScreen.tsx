@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   Image,
   ActivityIndicator,
   StyleSheet,
+  ScrollView,
 } from "react-native";
 import { CameraView } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
@@ -27,6 +28,36 @@ interface ScanScreenProps {
   onViewHistoryImage: () => void;
 }
 
+// Helper to get grade color
+const getGradeColor = (grade: string) => {
+  switch (grade) {
+    case "Export":
+      return theme.colors.success;
+    case "Local":
+      return "#F59E0B"; // Amber
+    case "Reject":
+      return theme.colors.error;
+    default:
+      return theme.colors.textSecondary;
+  }
+};
+
+// Helper to get severity color
+const getSeverityColor = (severity: string) => {
+  switch (severity) {
+    case "None":
+      return theme.colors.success;
+    case "Low":
+      return "#F59E0B"; // Amber
+    case "Moderate":
+      return "#F97316"; // Orange
+    case "Severe":
+      return theme.colors.error;
+    default:
+      return theme.colors.textSecondary;
+  }
+};
+
 export const ScanScreen: React.FC<ScanScreenProps> = ({
   cameraRef,
   capturedImage,
@@ -40,8 +71,45 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
   onReset,
   onViewHistoryImage,
 }) => {
+  const [selectedFishIndex, setSelectedFishIndex] = useState(0);
+
   // SCENARIO A: SHOW RESULT FROM SERVER
   if (analysisResult) {
+    const fishCount = analysisResult.detections?.length || 0;
+    const selectedDetection = analysisResult.detections?.[selectedFishIndex];
+
+    // Get per-fish mold data
+    const fishMoldResult =
+      analysisResult.mold_analysis?.fish_results?.[selectedFishIndex];
+
+    // Get per-fish color data
+    const fishColorStats =
+      analysisResult.color_analysis?.color_stats?.[selectedFishIndex];
+
+    // Calculate per-fish color score (convert std to score)
+    const getFishColorScore = () => {
+      if (fishColorStats?.combined_std !== undefined) {
+        const score = Math.min(
+          100,
+          Math.max(0, 100 * Math.exp(-fishColorStats.combined_std / 35)),
+        );
+        return score.toFixed(1);
+      }
+      return (
+        analysisResult.color_analysis?.consistency_score?.toFixed(1) || "N/A"
+      );
+    };
+
+    // Get per-fish grade based on score
+    const getFishGrade = () => {
+      const score = parseFloat(getFishColorScore());
+      if (isNaN(score))
+        return analysisResult.color_analysis?.quality_grade || "Unknown";
+      if (score >= 75) return "Export";
+      if (score >= 50) return "Local";
+      return "Reject";
+    };
+
     return (
       <View style={commonStyles.container}>
         <View style={commonStyles.screenHeader}>
@@ -58,12 +126,158 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
           <View style={{ width: 40 }} />
         </View>
 
-        {/* Single Result Image - Zoomable */}
+        {/* Result Image - Zoomable */}
         <View style={styles.resultContainer}>
           <ZoomableImage
             uri={analysisResult.result_image}
             style={styles.resultImage}
           />
+
+          {/* Fish Selection Buttons (if multiple fish) */}
+          {fishCount > 1 && (
+            <View style={styles.fishSelectorContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.fishSelectorContent}
+              >
+                {analysisResult.detections.map((_, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.fishSelectorButton,
+                      selectedFishIndex === index &&
+                        styles.fishSelectorButtonActive,
+                    ]}
+                    onPress={() => setSelectedFishIndex(index)}
+                  >
+                    <Text
+                      style={[
+                        styles.fishSelectorText,
+                        selectedFishIndex === index &&
+                          styles.fishSelectorTextActive,
+                      ]}
+                    >
+                      #{index + 1}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Fish Details Overlay Panel - Only show if daing detected */}
+          {analysisResult.is_daing_detected && fishCount > 0 && (
+            <View style={styles.detailsOverlay}>
+              <View style={styles.detailsCard}>
+                {/* Classification */}
+                <View style={styles.detailRow}>
+                  <Ionicons
+                    name="fish-outline"
+                    size={12}
+                    color={theme.colors.textSecondary}
+                  />
+                  <Text style={styles.detailValue}>
+                    {selectedDetection?.fish_type || "Unknown"}{" "}
+                    <Text style={styles.confidence}>
+                      {((selectedDetection?.confidence || 0) * 100).toFixed(0)}%
+                    </Text>
+                  </Text>
+                </View>
+
+                {/* Color Score */}
+                <View style={styles.detailRow}>
+                  <Ionicons
+                    name="color-palette-outline"
+                    size={12}
+                    color={theme.colors.textSecondary}
+                  />
+                  <Text style={styles.detailValue}>{getFishColorScore()}%</Text>
+                </View>
+
+                {/* Quality Grade */}
+                <View
+                  style={[
+                    styles.gradeBadge,
+                    { backgroundColor: getGradeColor(getFishGrade()) + "20" },
+                  ]}
+                >
+                  <Ionicons
+                    name="ribbon-outline"
+                    size={12}
+                    color={getGradeColor(getFishGrade())}
+                  />
+                  <Text
+                    style={[
+                      styles.gradeText,
+                      { color: getGradeColor(getFishGrade()) },
+                    ]}
+                  >
+                    {getFishGrade()}
+                  </Text>
+                </View>
+
+                {/* Mold Coverage */}
+                <View style={styles.detailRow}>
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={12}
+                    color={theme.colors.textSecondary}
+                  />
+                  <Text style={styles.detailValue}>
+                    Mold{" "}
+                    {fishMoldResult?.mold_coverage_percent?.toFixed(1) ||
+                      analysisResult.mold_analysis?.avg_coverage_percent?.toFixed(
+                        1,
+                      ) ||
+                      "0.0"}
+                    %
+                  </Text>
+                </View>
+
+                {/* Mold Severity */}
+                <View
+                  style={[
+                    styles.severityBadge,
+                    {
+                      backgroundColor:
+                        getSeverityColor(
+                          fishMoldResult?.severity ||
+                            analysisResult.mold_analysis?.overall_severity ||
+                            "None",
+                        ) + "20",
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="warning-outline"
+                    size={12}
+                    color={getSeverityColor(
+                      fishMoldResult?.severity ||
+                        analysisResult.mold_analysis?.overall_severity ||
+                        "None",
+                    )}
+                  />
+                  <Text
+                    style={[
+                      styles.severityText,
+                      {
+                        color: getSeverityColor(
+                          fishMoldResult?.severity ||
+                            analysisResult.mold_analysis?.overall_severity ||
+                            "None",
+                        ),
+                      },
+                    ]}
+                  >
+                    {fishMoldResult?.severity ||
+                      analysisResult.mold_analysis?.overall_severity ||
+                      "None"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
         </View>
 
         <View style={commonStyles.bottomButtonBar}>
@@ -407,5 +621,111 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.success,
     flexDirection: "row",
     gap: 8,
+  },
+
+  // Fish Selector Styles
+  fishSelectorContainer: {
+    position: "absolute",
+    top: 12,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  fishSelectorContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  fishSelectorButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  fishSelectorButtonActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  fishSelectorText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "rgba(255, 255, 255, 0.8)",
+  },
+  fishSelectorTextActive: {
+    color: "#fff",
+  },
+
+  // Details Overlay Styles
+  detailsOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  detailsCard: {
+    backgroundColor: "rgba(15, 23, 42, 0.9)",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: 8,
+  },
+  detailLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  detailLabelText: {
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+  },
+  detailValue: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  confidence: {
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    fontWeight: "400",
+  },
+  gradeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  gradeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  severityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  severityText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
 });

@@ -48,6 +48,7 @@ export default function Index() {
   const [autoSaveDataset, setAutoSaveDataset] = useState(false);
   const [serverBaseUrl, setServerBaseUrl] = useState(DEFAULT_SERVER_BASE_URL);
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.7);
+  const [hideColorOverlay, setHideColorOverlay] = useState(true);
   const serverUrls = useMemo(
     () => getServerUrls(serverBaseUrl),
     [serverBaseUrl],
@@ -178,6 +179,7 @@ export default function Index() {
         serverUrls.analyze,
         autoSaveDataset,
         confidenceThreshold,
+        hideColorOverlay,
       );
       setAnalysisResult(result);
     } catch (error) {
@@ -238,9 +240,13 @@ export default function Index() {
           autoSaveDataset={autoSaveDataset}
           serverBaseUrl={serverBaseUrl}
           confidenceThreshold={confidenceThreshold}
+          hideColorOverlay={hideColorOverlay}
           onToggleAutoSaveDataset={() => setAutoSaveDataset(!autoSaveDataset)}
           onSetServerUrl={setServerBaseUrl}
           onSetConfidenceThreshold={setConfidenceThreshold}
+          onToggleHideColorOverlay={() =>
+            setHideColorOverlay(!hideColorOverlay)
+          }
           onClose={() => setShowSettings(false)}
         />
       </>

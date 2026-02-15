@@ -120,6 +120,21 @@ export interface MoldAnalyticsStats {
   >;
 }
 
+// Per-fish color analysis stats
+export interface ColorFishStats {
+  region_index: number;
+  l_std: number;
+  a_std: number;
+  b_std: number;
+  l_mean: number;
+  a_mean: number;
+  b_mean: number;
+  combined_std: number;
+  rgb_std: number[];
+  pixel_count: number;
+  coverage_percent: number;
+}
+
 export interface AnalysisScanResult {
   status: string;
   is_daing_detected: boolean;
@@ -129,6 +144,7 @@ export interface AnalysisScanResult {
     consistency_score: number;
     quality_grade: string;
     avg_std_deviation: number;
+    color_stats?: ColorFishStats[];
   } | null;
   mold_analysis: MoldAnalysisResult | null;
 }

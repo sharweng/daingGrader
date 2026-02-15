@@ -335,13 +335,6 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Swipe indicator */}
-        <View style={styles.swipeIndicator}>
-          <Text style={styles.swipeIndicatorText}>
-            {currentIndex + 1} / {entries.length} • Swipe to navigate
-          </Text>
-        </View>
-
         <FlatList
           ref={flatListRef}
           data={entries}
@@ -714,15 +707,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.error,
     flexDirection: "row",
     gap: 8,
-  },
-  swipeIndicator: {
-    alignItems: "center",
-    paddingVertical: 8,
-    backgroundColor: theme.colors.backgroundLight,
-  },
-  swipeIndicatorText: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
   },
   tabBar: {
     flexDirection: "row",

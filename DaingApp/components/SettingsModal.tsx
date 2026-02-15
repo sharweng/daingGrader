@@ -6,6 +6,9 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
 import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,9 +19,11 @@ interface SettingsModalProps {
   autoSaveDataset: boolean;
   serverBaseUrl: string;
   confidenceThreshold: number;
+  hideColorOverlay: boolean;
   onToggleAutoSaveDataset: () => void;
   onSetServerUrl: (url: string) => void;
   onSetConfidenceThreshold: (value: number) => void;
+  onToggleHideColorOverlay: () => void;
   onClose: () => void;
 }
 
@@ -27,9 +32,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   autoSaveDataset,
   serverBaseUrl,
   confidenceThreshold,
+  hideColorOverlay,
   onToggleAutoSaveDataset,
   onSetServerUrl,
   onSetConfidenceThreshold,
+  onToggleHideColorOverlay,
   onClose,
 }) => {
   return (
@@ -39,121 +46,202 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={modalStyles.modalOverlay}>
-        <TouchableOpacity
-          style={{ flex: 1 }}
-          activeOpacity={1}
-          onPress={onClose}
-        />
-        <View style={modalStyles.modalContent}>
-          <View style={modalStyles.modalHandle} />
-          <Text style={modalStyles.modalTitle}>Settings</Text>
-
-          <View style={modalStyles.inputSection}>
-            <Text style={modalStyles.inputLabel}>Server URL</Text>
-            <TextInput
-              style={modalStyles.input}
-              value={serverBaseUrl}
-              onChangeText={onSetServerUrl}
-              placeholder="http://192.168.1.108:8000"
-              placeholderTextColor="#64748b"
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-            />
-          </View>
-
-          <Text style={modalStyles.settingDescription}>
-            Enter your backend server address (e.g., http://192.168.1.5:8000)
-          </Text>
-
-          {/* Confidence Threshold Slider */}
-          <View style={styles.sliderSection}>
-            <View style={styles.sliderHeader}>
-              <Text style={modalStyles.inputLabel}>Detection Confidence</Text>
-              <Text style={styles.sliderValue}>
-                {Math.round(confidenceThreshold * 100)}%
-              </Text>
-            </View>
-            <Slider
-              style={styles.slider}
-              minimumValue={0.3}
-              maximumValue={0.95}
-              step={0.05}
-              value={confidenceThreshold}
-              onValueChange={onSetConfidenceThreshold}
-              minimumTrackTintColor="#3B82F6"
-              maximumTrackTintColor="#334155"
-              thumbTintColor="#3B82F6"
-            />
-            <View style={styles.sliderLabels}>
-              <Text style={styles.sliderLabelText}>30%</Text>
-              <Text style={styles.sliderLabelText}>95%</Text>
-            </View>
-          </View>
-
-          <Text style={modalStyles.settingDescription}>
-            Minimum confidence level required to detect fish. Lower values
-            detect more but may include false positives.
-          </Text>
-
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <View style={modalStyles.modalOverlay}>
           <TouchableOpacity
-            style={modalStyles.settingRow}
-            onPress={onToggleAutoSaveDataset}
-          >
-            <Text style={modalStyles.settingText}>Auto-Save to Dataset</Text>
-            <View
-              style={[
-                modalStyles.checkbox,
-                autoSaveDataset && modalStyles.checkboxActive,
-              ]}
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={onClose}
+          />
+          <View style={styles.compactModalContent}>
+            <View style={modalStyles.modalHandle} />
+            <Text style={styles.compactTitle}>Settings</Text>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
-              {autoSaveDataset && (
-                <Ionicons name="checkmark" size={18} color="white" />
-              )}
-            </View>
-          </TouchableOpacity>
+              {/* Server URL */}
+              <View style={styles.compactSection}>
+                <Text style={styles.compactLabel}>Server URL</Text>
+                <TextInput
+                  style={styles.compactInput}
+                  value={serverBaseUrl}
+                  onChangeText={onSetServerUrl}
+                  placeholder="http://192.168.1.108:8000"
+                  placeholderTextColor="#64748b"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                />
+              </View>
 
-          <Text style={modalStyles.settingDescription}>
-            Automatically save high-confidence scans (85%+) to training dataset
-          </Text>
+              {/* Confidence Threshold Slider */}
+              <View style={styles.compactSection}>
+                <View style={styles.sliderHeader}>
+                  <Text style={styles.compactLabel}>Confidence</Text>
+                  <Text style={styles.sliderValue}>
+                    {Math.round(confidenceThreshold * 100)}%
+                  </Text>
+                </View>
+                <Slider
+                  style={styles.slider}
+                  minimumValue={0.3}
+                  maximumValue={0.95}
+                  step={0.05}
+                  value={confidenceThreshold}
+                  onValueChange={onSetConfidenceThreshold}
+                  minimumTrackTintColor="#3B82F6"
+                  maximumTrackTintColor="#334155"
+                  thumbTintColor="#3B82F6"
+                />
+              </View>
 
-          <TouchableOpacity style={modalStyles.closeButton} onPress={onClose}>
-            <Text style={modalStyles.closeButtonText}>Done</Text>
-          </TouchableOpacity>
+              {/* Toggle Options */}
+              <View style={styles.togglesContainer}>
+                <TouchableOpacity
+                  style={styles.compactToggleRow}
+                  onPress={onToggleAutoSaveDataset}
+                >
+                  <Text style={styles.toggleText}>Auto-Save Dataset</Text>
+                  <View
+                    style={[
+                      styles.compactCheckbox,
+                      autoSaveDataset && styles.checkboxActive,
+                    ]}
+                  >
+                    {autoSaveDataset && (
+                      <Ionicons name="checkmark" size={14} color="white" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.compactToggleRow, { borderBottomWidth: 0 }]}
+                  onPress={onToggleHideColorOverlay}
+                >
+                  <Text style={styles.toggleText}>Hide Color Overlay</Text>
+                  <View
+                    style={[
+                      styles.compactCheckbox,
+                      hideColorOverlay && styles.checkboxActive,
+                    ]}
+                  >
+                    {hideColorOverlay && (
+                      <Ionicons name="checkmark" size={14} color="white" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity style={styles.doneButton} onPress={onClose}>
+              <Text style={styles.doneButtonText}>Done</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  sliderSection: {
-    marginBottom: 8,
-    marginTop: 8,
+  compactModalContent: {
+    backgroundColor: "#1E293B",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 16,
+    paddingBottom: 24,
+    maxHeight: "70%",
+  },
+  compactTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  compactSection: {
+    marginBottom: 12,
+  },
+  compactLabel: {
+    fontSize: 12,
+    color: "#94A3B8",
+    marginBottom: 6,
+    fontWeight: "500",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  compactInput: {
+    backgroundColor: "#0F172A",
+    borderWidth: 1,
+    borderColor: "#334155",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: "#FFFFFF",
   },
   sliderHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   sliderValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
     color: "#3B82F6",
   },
   slider: {
     width: "100%",
-    height: 40,
+    height: 36,
   },
-  sliderLabels: {
+  togglesContainer: {
+    backgroundColor: "#0F172A",
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  compactToggleRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 4,
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#334155",
   },
-  sliderLabelText: {
-    fontSize: 12,
-    color: "#64748B",
+  toggleText: {
+    fontSize: 14,
+    color: "#FFFFFF",
+    fontWeight: "500",
+  },
+  compactCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#334155",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  checkboxActive: {
+    backgroundColor: "#3B82F6",
+    borderColor: "#3B82F6",
+  },
+  doneButton: {
+    backgroundColor: "#3B82F6",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  doneButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

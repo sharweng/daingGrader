@@ -104,6 +104,7 @@ async def analyze_fish(
     file: UploadFile = File(...), 
     auto_save_dataset: bool = False,
     confidence_threshold: float = 0.7,
+    hide_color_overlay: bool = True,
     authorization: Optional[str] = Header(None)
 ):
     """
@@ -113,6 +114,7 @@ async def analyze_fish(
         file: Uploaded image file
         auto_save_dataset: Whether to auto-save high-confidence images
         confidence_threshold: Minimum confidence for detection (0.0-1.0, default 0.7 = 70%)
+        hide_color_overlay: Whether to hide the color consistency overlay (default True)
         authorization: Optional auth token for user tracking
         
     Returns:
@@ -127,7 +129,7 @@ async def analyze_fish(
             user_id = session["user_id"]
     # Clamp confidence threshold between 0.1 and 1.0
     confidence_threshold = max(0.1, min(1.0, confidence_threshold))
-    print(f"Received an image for AI Analysis... (auto_save_dataset: {auto_save_dataset}, confidence: {confidence_threshold:.0%})")
+    print(f"Received an image for AI Analysis... (auto_save_dataset: {auto_save_dataset}, confidence: {confidence_threshold:.0%}, hide_color_overlay: {hide_color_overlay})")
     
     # 1. READ IMAGE
     contents = await file.read()
@@ -163,7 +165,7 @@ async def analyze_fish(
             mold_analysis = analyze_mold_with_boxes(img, filtered_boxes)
         
         # Create combined result image with mold visualization
-        result_img = draw_combined_result_image(img, results, filtered_indices, model, color_analysis, mold_analysis)
+        result_img = draw_combined_result_image(img, results, filtered_indices, model, color_analysis, mold_analysis, hide_color_overlay)
         
         print(f"✅ Found {len(filtered_indices)} high-confidence daing detection(s)")
         if color_analysis:
