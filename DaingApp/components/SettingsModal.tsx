@@ -48,15 +48,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
       >
         <View style={modalStyles.modalOverlay}>
           <TouchableOpacity
-            style={{ flex: 1 }}
+            style={{ flex: 1, minHeight: 100 }}
             activeOpacity={1}
             onPress={onClose}
           />
-          <View style={styles.compactModalContent}>
+          <View style={[styles.compactModalContent, { maxHeight: "80%" }]}>
             <View style={modalStyles.modalHandle} />
             <Text style={styles.compactTitle}>Settings</Text>
 

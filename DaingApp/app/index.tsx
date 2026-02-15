@@ -154,6 +154,17 @@ export default function Index() {
 
   const handlePickImage = async () => {
     try {
+      // Request media library permissions first (required for Android APK)
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Required",
+          "Please grant gallery access to select images.",
+        );
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: "images",
         allowsEditing: false,
