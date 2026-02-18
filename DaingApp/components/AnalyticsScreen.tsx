@@ -410,6 +410,288 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
     }
   };
 
+  // SVG Chart Generation Helpers for HTML Reports
+  const generateDonutChartSVG = (
+    data: Array<{ label: string; value: number; color: string }>,
+    size: number = 200,
+    title?: string,
+  ): string => {
+    const total = data.reduce((sum, d) => sum + d.value, 0);
+    if (total === 0) return "";
+
+    const cx = size / 2;
+    const cy = size / 2;
+    const outerRadius = size / 2 - 10;
+    const innerRadius = outerRadius * 0.6;
+
+    let currentAngle = -90;
+    let paths = "";
+
+    data.forEach(({ label, value, color }) => {
+      if (value === 0) return;
+      const percentage = (value / total) * 100;
+      const angle = (percentage / 100) * 360;
+      const startRad = (currentAngle * Math.PI) / 180;
+      const endRad = ((currentAngle + angle) * Math.PI) / 180;
+
+      const x1Outer = cx + outerRadius * Math.cos(startRad);
+      const y1Outer = cy + outerRadius * Math.sin(startRad);
+      const x2Outer = cx + outerRadius * Math.cos(endRad);
+      const y2Outer = cy + outerRadius * Math.sin(endRad);
+      const x1Inner = cx + innerRadius * Math.cos(endRad);
+      const y1Inner = cy + innerRadius * Math.sin(endRad);
+      const x2Inner = cx + innerRadius * Math.cos(startRad);
+      const y2Inner = cy + innerRadius * Math.sin(startRad);
+
+      const largeArc = angle > 180 ? 1 : 0;
+
+      if (angle >= 359.9) {
+        // Full circle - draw two half circles
+        paths += `<circle cx="${cx}" cy="${cy}" r="${outerRadius}" fill="none" stroke="${color}" stroke-width="${outerRadius - innerRadius}"/>`;
+      } else {
+        paths += `<path d="M ${x1Outer} ${y1Outer} A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${x2Outer} ${y2Outer} L ${x1Inner} ${y1Inner} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${x2Inner} ${y2Inner} Z" fill="${color}"/>`;
+      }
+      currentAngle += angle;
+    });
+
+    // Add center text
+    const centerText = `<text x="${cx}" y="${cy - 5}" text-anchor="middle" font-size="20" font-weight="bold" fill="#333">${total}</text>
+      <text x="${cx}" y="${cy + 15}" text-anchor="middle" font-size="11" fill="#666">${title || "Total"}</text>`;
+
+    // Add legend
+    let legendY = size + 10;
+    let legend = "";
+    data.forEach(({ label, value, color }) => {
+      if (value === 0) return;
+      const pct = ((value / total) * 100).toFixed(1);
+      legend += `<rect x="10" y="${legendY}" width="12" height="12" rx="2" fill="${color}"/>
+        <text x="28" y="${legendY + 10}" font-size="11" fill="#333">${label}: ${value} (${pct}%)</text>`;
+      legendY += 20;
+    });
+
+    return `<svg width="${size}" height="${legendY + 10}" viewBox="0 0 ${size} ${legendY + 10}" xmlns="http://www.w3.org/2000/svg">
+      ${paths}
+      ${centerText}
+      ${legend}
+    </svg>`;
+  };
+
+  const generateBarChartSVG = (
+    data: Array<{ label: string; value: number; color?: string }>,
+    width: number = 500,
+    maxLabelWidth: number = 100,
+  ): string => {
+    if (data.length === 0) return "";
+
+    const barHeight = 28;
+    const barGap = 8;
+    const height = data.length * (barHeight + barGap) + 20;
+    const maxValue = Math.max(...data.map((d) => d.value), 1);
+    const chartWidth = width - maxLabelWidth - 60;
+
+    let bars = "";
+    data.forEach(({ label, value, color = "#4CAF50" }, index) => {
+      const y = index * (barHeight + barGap) + 10;
+      const barWidth = (value / maxValue) * chartWidth;
+
+      bars += `
+        <text x="${maxLabelWidth - 5}" y="${y + barHeight / 2 + 4}" text-anchor="end" font-size="12" fill="#333">${label}</text>
+        <rect x="${maxLabelWidth}" y="${y}" width="${chartWidth}" height="${barHeight}" rx="4" fill="#e0e0e0"/>
+        <rect x="${maxLabelWidth}" y="${y}" width="${barWidth}" height="${barHeight}" rx="4" fill="${color}"/>
+        <text x="${maxLabelWidth + barWidth + 5}" y="${y + barHeight / 2 + 4}" font-size="12" font-weight="600" fill="#333">${typeof value === "number" && value % 1 !== 0 ? value.toFixed(1) : value}</text>
+      `;
+    });
+
+    return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+      ${bars}
+    </svg>`;
+  };
+
+  const generateLineChartSVG = (
+    data: Array<{ label: string; value: number }>,
+    width: number = 500,
+    height: number = 200,
+  ): string => {
+    if (data.length === 0) return "";
+
+    const padding = { left: 50, right: 20, top: 20, bottom: 50 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+    const maxValue = Math.max(...data.map((d) => d.value), 1);
+
+    // Generate points
+    const points = data.map((d, i) => {
+      const x = padding.left + (i / (data.length - 1 || 1)) * chartWidth;
+      const y = padding.top + chartHeight - (d.value / maxValue) * chartHeight;
+      return { x, y, ...d };
+    });
+
+    // Create line path
+    const linePath = points
+      .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
+      .join(" ");
+
+    // Create area path
+    const areaPath = `${linePath} L ${points[points.length - 1].x} ${padding.top + chartHeight} L ${points[0].x} ${padding.top + chartHeight} Z`;
+
+    // Grid lines
+    let gridLines = "";
+    for (let i = 0; i <= 4; i++) {
+      const y = padding.top + (i / 4) * chartHeight;
+      const value = Math.round(maxValue * (1 - i / 4));
+      gridLines += `<line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="#e0e0e0" stroke-width="1"/>
+        <text x="${padding.left - 5}" y="${y + 4}" text-anchor="end" font-size="10" fill="#666">${value}</text>`;
+    }
+
+    // Data points and labels
+    let pointsAndLabels = "";
+    points.forEach((p, i) => {
+      pointsAndLabels += `
+        <circle cx="${p.x}" cy="${p.y}" r="5" fill="#4CAF50" stroke="white" stroke-width="2"/>
+        <text x="${p.x}" y="${height - 10}" text-anchor="middle" font-size="9" fill="#666" transform="rotate(-45 ${p.x} ${height - 10})">${p.label}</text>
+      `;
+    });
+
+    return `<svg width="${width}" height="${height + 30}" viewBox="0 0 ${width} ${height + 30}" xmlns="http://www.w3.org/2000/svg">
+      ${gridLines}
+      <path d="${areaPath}" fill="rgba(76, 175, 80, 0.2)"/>
+      <path d="${linePath}" fill="none" stroke="#4CAF50" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      ${pointsAndLabels}
+    </svg>`;
+  };
+
+  const generateScatterPlotSVG = (
+    data: Array<{
+      x: number;
+      y: number;
+      label: string;
+      color: string;
+      size?: number;
+    }>,
+    width: number = 500,
+    height: number = 300,
+    xAxisLabel: string = "X Axis",
+    yAxisLabel: string = "Y Axis",
+    xMax: number = 100,
+    yMax: number = 100,
+  ): string => {
+    if (data.length === 0) return "";
+
+    const padding = { left: 60, right: 30, top: 30, bottom: 60 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+
+    // Grid lines
+    let gridLines = "";
+    for (let i = 0; i <= 5; i++) {
+      const xPos = padding.left + (i / 5) * chartWidth;
+      const yPos = padding.top + (i / 5) * chartHeight;
+      const xVal = Math.round((i / 5) * xMax);
+      const yVal = Math.round(yMax - (i / 5) * yMax);
+
+      // Vertical grid lines
+      gridLines += `<line x1="${xPos}" y1="${padding.top}" x2="${xPos}" y2="${height - padding.bottom}" stroke="#e0e0e0" stroke-width="1"/>`;
+      gridLines += `<text x="${xPos}" y="${height - padding.bottom + 20}" text-anchor="middle" font-size="10" fill="#666">${xVal}%</text>`;
+
+      // Horizontal grid lines
+      gridLines += `<line x1="${padding.left}" y1="${yPos}" x2="${width - padding.right}" y2="${yPos}" stroke="#e0e0e0" stroke-width="1"/>`;
+      gridLines += `<text x="${padding.left - 10}" y="${yPos + 4}" text-anchor="end" font-size="10" fill="#666">${yVal}%</text>`;
+    }
+
+    // Axis labels
+    const axisLabels = `
+      <text x="${width / 2}" y="${height - 10}" text-anchor="middle" font-size="12" font-weight="600" fill="#333">${xAxisLabel}</text>
+      <text x="15" y="${height / 2}" text-anchor="middle" font-size="12" font-weight="600" fill="#333" transform="rotate(-90 15 ${height / 2})">${yAxisLabel}</text>
+    `;
+
+    // Plot points with hover info
+    let points = "";
+    let labels = "";
+    data.forEach(({ x, y, label, color, size = 8 }) => {
+      const px = padding.left + (x / xMax) * chartWidth;
+      const py = padding.top + chartHeight - (y / yMax) * chartHeight;
+
+      points += `
+        <circle cx="${px}" cy="${py}" r="${size}" fill="${color}" fill-opacity="0.7" stroke="${color}" stroke-width="2"/>
+      `;
+
+      // Add label near the point
+      labels += `<text x="${px + size + 3}" y="${py + 4}" font-size="9" fill="#333">${label}</text>`;
+    });
+
+    // Legend for colors used
+    const colorMap = new Map<string, string>();
+    data.forEach((d) => {
+      if (!colorMap.has(d.color)) {
+        colorMap.set(d.color, d.label.split(" ")[0]); // Use first word as category
+      }
+    });
+
+    return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+      <rect x="${padding.left}" y="${padding.top}" width="${chartWidth}" height="${chartHeight}" fill="#fafafa" stroke="#ddd"/>
+      ${gridLines}
+      ${axisLabels}
+      ${points}
+      ${labels}
+    </svg>`;
+  };
+
+  const generateStackedBarChartSVG = (
+    data: Array<{
+      label: string;
+      segments: Array<{ value: number; color: string; name: string }>;
+    }>,
+    width: number = 500,
+  ): string => {
+    if (data.length === 0) return "";
+
+    const barHeight = 24;
+    const barGap = 8;
+    const labelWidth = 100;
+    const chartWidth = width - labelWidth - 50;
+    const height = data.length * (barHeight + barGap) + 60;
+
+    let bars = "";
+    const legendItems = new Set<string>();
+
+    data.forEach(({ label, segments }, index) => {
+      const total = segments.reduce((sum, s) => sum + s.value, 0);
+      if (total === 0) return;
+
+      const y = index * (barHeight + barGap) + 10;
+      let xOffset = labelWidth;
+
+      bars += `<text x="${labelWidth - 5}" y="${y + barHeight / 2 + 4}" text-anchor="end" font-size="11" fill="#333">${label}</text>`;
+      bars += `<rect x="${labelWidth}" y="${y}" width="${chartWidth}" height="${barHeight}" rx="4" fill="#e0e0e0"/>`;
+
+      segments.forEach(({ value, color, name }) => {
+        if (value === 0) return;
+        const segWidth = (value / total) * chartWidth;
+        bars += `<rect x="${xOffset}" y="${y}" width="${segWidth}" height="${barHeight}" fill="${color}"/>`;
+        legendItems.add(JSON.stringify({ name, color }));
+        xOffset += segWidth;
+      });
+
+      bars += `<text x="${labelWidth + chartWidth + 5}" y="${y + barHeight / 2 + 4}" font-size="11" fill="#666">${total}</text>`;
+    });
+
+    // Legend
+    let legendX = labelWidth;
+    const legendY = data.length * (barHeight + barGap) + 25;
+    let legend = "";
+    Array.from(legendItems).forEach((item) => {
+      const { name, color } = JSON.parse(item);
+      legend += `<rect x="${legendX}" y="${legendY}" width="12" height="12" rx="2" fill="${color}"/>
+        <text x="${legendX + 16}" y="${legendY + 10}" font-size="10" fill="#333">${name}</text>`;
+      legendX += 80;
+    });
+
+    return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+      ${bars}
+      ${legend}
+    </svg>`;
+  };
+
   // Generate HTML report content
   const generateReportHTML = (format: ExportFormat): string => {
     if (!analytics) return "";
@@ -436,7 +718,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
       }
       .header { 
         text-align: center; 
-        border-bottom: 3px solid #4CAF50; 
+        border-bottom: 3px solid #2196F3; 
         padding-bottom: 20px; 
         margin-bottom: 30px;
       }
@@ -457,9 +739,19 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
       .section { 
         margin-bottom: 30px; 
         page-break-inside: avoid;
+        padding-top: 20px;
+      }
+      @media print {
+        .section {
+          padding-top: 25px;
+        }
+      }
+      @page {
+        margin-top: 20mm;
+        margin-bottom: 15mm;
       }
       .section-title { 
-        background: linear-gradient(135deg, #4CAF50, #2E7D32);
+        background: linear-gradient(135deg, #2196F3, #1565C0);
         color: white; 
         padding: 12px 16px; 
         border-radius: 8px;
@@ -470,10 +762,11 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
         background: #f8f9fa; 
         padding: 15px; 
         border-radius: 8px;
-        border-left: 4px solid #4CAF50;
+        border-left: 4px solid #2196F3;
         line-height: 1.7;
         font-size: 14px;
         color: #444;
+        margin-top: 20px;
       }
       table { 
         width: 100%; 
@@ -487,7 +780,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
         text-align: left; 
       }
       th { 
-        background-color: #4CAF50; 
+        background-color: #2196F3; 
         color: white; 
       }
       tr:nth-child(even) { 
@@ -499,6 +792,12 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
         gap: 15px; 
         margin-bottom: 15px;
       }
+      .stats-grid.single { 
+        grid-template-columns: 1fr; 
+        max-width: 200px;
+        margin-left: auto;
+        margin-right: auto;
+      }
       .stat-card { 
         background: #f8f9fa; 
         padding: 15px; 
@@ -509,7 +808,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
       .stat-value { 
         font-size: 24px; 
         font-weight: bold; 
-        color: #4CAF50; 
+        color: #2196F3; 
       }
       .stat-label { 
         font-size: 12px; 
@@ -535,7 +834,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
       }
       .bar-fill { 
         height: 100%; 
-        background: #4CAF50; 
+        background: #2196F3; 
         border-radius: 10px; 
       }
       .bar-value { 
@@ -544,6 +843,17 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
         text-align: right;
         font-weight: 600;
         font-size: 13px;
+      }
+      .chart-container {
+        text-align: center;
+        margin: 20px 0;
+        padding: 15px;
+        background: #fafafa;
+        border-radius: 8px;
+      }
+      .chart-container svg {
+        max-width: 100%;
+        height: auto;
       }
       .footer {
         margin-top: 40px;
@@ -579,68 +889,142 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
       html += `<div class="section">`;
       html += `<div class="section-title">${graphInfo.label}</div>`;
 
-      // Add detailed summary for PDF and Word
-      if (format === "pdf" || format === "word") {
-        html += `<div class="summary">${getGraphSummary(graphId)}</div>`;
-      }
-
       // Add data tables/visuals
       switch (graphId) {
         case "detection_overview":
-          html += `
-            <div class="stats-grid">
-              <div class="stat-card">
-                <div class="stat-value">${analytics.total_scans}</div>
-                <div class="stat-label">Total Scans</div>
+          {
+            const pieData = [
+              {
+                label: "Daing",
+                value: analytics.daing_scans,
+                color: "#4CAF50",
+              },
+              {
+                label: "Non-Daing",
+                value: analytics.non_daing_scans,
+                color: "#F44336",
+              },
+            ];
+            html += `
+              <div class="stats-grid">
+                <div class="stat-card">
+                  <div class="stat-value">${analytics.total_scans}</div>
+                  <div class="stat-label">Total Scans</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-value" style="color: #4CAF50;">${analytics.daing_scans}</div>
+                  <div class="stat-label">Daing Detected</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-value" style="color: #F44336;">${analytics.non_daing_scans}</div>
+                  <div class="stat-label">Non-Daing</div>
+                </div>
               </div>
-              <div class="stat-card">
-                <div class="stat-value" style="color: #4CAF50;">${analytics.daing_scans}</div>
-                <div class="stat-label">Daing Detected</div>
+              <div class="chart-container">
+                ${generateDonutChartSVG(pieData, 200, "Scans")}
               </div>
-              <div class="stat-card">
-                <div class="stat-value" style="color: #F44336;">${analytics.non_daing_scans}</div>
-                <div class="stat-label">Non-Daing</div>
-              </div>
-            </div>
-          `;
+            `;
+          }
           break;
 
         case "fish_type_distribution":
+          {
+            const fishData = Object.entries(analytics.fish_type_distribution)
+              .sort(([, a], [, b]) => b - a)
+              .map(([type, count]) => ({
+                label: type,
+                value: count,
+                color: FISH_COLORS[type] || FISH_COLORS.default,
+              }));
+            const totalDist = Object.values(
+              analytics.fish_type_distribution,
+            ).reduce((a, b) => a + b, 0);
+
+            html += `<div class="chart-container">${generateBarChartSVG(fishData, 500, 120)}</div>`;
+            html += `<table><tr><th>Fish Type</th><th>Count</th><th>Percentage</th></tr>`;
+            Object.entries(analytics.fish_type_distribution)
+              .sort(([, a], [, b]) => b - a)
+              .forEach(([type, count]) => {
+                const pct =
+                  totalDist > 0 ? ((count / totalDist) * 100).toFixed(1) : "0";
+                html += `<tr><td>${type}</td><td>${count}</td><td>${pct}%</td></tr>`;
+              });
+            html += `</table>`;
+          }
+          break;
+
         case "fish_type_pie":
-          html += `<table><tr><th>Fish Type</th><th>Count</th><th>Percentage</th></tr>`;
-          const totalDist = Object.values(
-            analytics.fish_type_distribution,
-          ).reduce((a, b) => a + b, 0);
-          Object.entries(analytics.fish_type_distribution)
-            .sort(([, a], [, b]) => b - a)
-            .forEach(([type, count]) => {
-              const pct =
-                totalDist > 0 ? ((count / totalDist) * 100).toFixed(1) : "0";
-              html += `<tr><td>${type}</td><td>${count}</td><td>${pct}%</td></tr>`;
-            });
-          html += `</table>`;
+          {
+            const pieData = Object.entries(analytics.fish_type_distribution)
+              .sort(([, a], [, b]) => b - a)
+              .map(([type, count]) => ({
+                label: type,
+                value: count,
+                color: FISH_COLORS[type] || FISH_COLORS.default,
+              }));
+            const totalPie = Object.values(
+              analytics.fish_type_distribution,
+            ).reduce((a, b) => a + b, 0);
+
+            html += `<div class="chart-container">${generateDonutChartSVG(pieData, 220, "Fish")}</div>`;
+            html += `<table><tr><th>Fish Type</th><th>Count</th><th>Percentage</th></tr>`;
+            Object.entries(analytics.fish_type_distribution)
+              .sort(([, a], [, b]) => b - a)
+              .forEach(([type, count]) => {
+                const pct =
+                  totalPie > 0 ? ((count / totalPie) * 100).toFixed(1) : "0";
+                html += `<tr><td>${type}</td><td>${count}</td><td>${pct}%</td></tr>`;
+              });
+            html += `</table>`;
+          }
           break;
 
         case "average_confidence":
-          html += `<table><tr><th>Fish Type</th><th>Average Confidence</th></tr>`;
-          Object.entries(analytics.average_confidence)
-            .sort(([, a], [, b]) => b - a)
-            .forEach(([type, conf]) => {
-              html += `<tr><td>${type}</td><td>${(conf * 100).toFixed(1)}%</td></tr>`;
-            });
-          html += `</table>`;
+          {
+            const confData = Object.entries(analytics.average_confidence)
+              .sort(([, a], [, b]) => b - a)
+              .map(([type, conf]) => ({
+                label: type,
+                value: Math.round(conf * 100),
+                color:
+                  conf >= 0.9 ? "#4CAF50" : conf >= 0.8 ? "#8BC34A" : "#FFC107",
+              }));
+
+            html += `<div class="chart-container">${generateBarChartSVG(confData, 500, 120)}</div>`;
+            html += `<table><tr><th>Fish Type</th><th>Average Confidence</th></tr>`;
+            Object.entries(analytics.average_confidence)
+              .sort(([, a], [, b]) => b - a)
+              .forEach(([type, conf]) => {
+                html += `<tr><td>${type}</td><td>${(conf * 100).toFixed(1)}%</td></tr>`;
+              });
+            html += `</table>`;
+          }
           break;
 
         case "color_consistency":
           if (analytics.color_consistency) {
+            const gradeData = Object.entries(
+              analytics.color_consistency.grade_distribution,
+            ).map(([grade, count]) => ({
+              label: grade,
+              value: count,
+              color:
+                grade === "Export"
+                  ? "#4CAF50"
+                  : grade === "Local"
+                    ? "#FFC107"
+                    : "#F44336",
+            }));
+
             html += `
-              <div class="stats-grid">
+              <div class="stats-grid single">
                 <div class="stat-card">
                   <div class="stat-value">${analytics.color_consistency.average_score.toFixed(1)}%</div>
                   <div class="stat-label">Average Score</div>
                 </div>
               </div>
               <h4>Grade Distribution</h4>
+              <div class="chart-container">${generateBarChartSVG(gradeData, 400, 100)}</div>
               <table><tr><th>Grade</th><th>Count</th></tr>`;
             Object.entries(
               analytics.color_consistency.grade_distribution,
@@ -651,7 +1035,24 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
             if (
               Object.keys(analytics.color_consistency.by_fish_type).length > 0
             ) {
-              html += `<h4>By Fish Type</h4><table><tr><th>Fish Type</th><th>Avg Score</th><th>Count</th></tr>`;
+              const byTypeData = Object.entries(
+                analytics.color_consistency.by_fish_type,
+              )
+                .sort(([, a], [, b]) => b.avg_score - a.avg_score)
+                .map(([type, data]) => ({
+                  label: type,
+                  value: Math.round(data.avg_score),
+                  color:
+                    data.avg_score >= 75
+                      ? "#4CAF50"
+                      : data.avg_score >= 50
+                        ? "#FFC107"
+                        : "#F44336",
+                }));
+
+              html += `<h4>By Fish Type</h4>`;
+              html += `<div class="chart-container">${generateBarChartSVG(byTypeData, 500, 120)}</div>`;
+              html += `<table><tr><th>Fish Type</th><th>Avg Score</th><th>Count</th></tr>`;
               Object.entries(analytics.color_consistency.by_fish_type)
                 .sort(([, a], [, b]) => b.avg_score - a.avg_score)
                 .forEach(([type, data]) => {
@@ -664,15 +1065,33 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
 
         case "mold_analysis":
           if (analytics.mold_analysis) {
+            const severityData = Object.entries(
+              analytics.mold_analysis.severity_distribution,
+            )
+              .filter(([severity]) => severity !== "None")
+              .map(([severity, count]) => ({
+                label: severity,
+                value: count,
+                color:
+                  severity === "Severe"
+                    ? "#F44336"
+                    : severity === "Moderate"
+                      ? "#FF9800"
+                      : "#FFC107",
+              }));
+
             html += `
-              <div class="stats-grid">
+              <div class="stats-grid single">
                 <div class="stat-card">
                   <div class="stat-value" style="color: #F44336;">${analytics.mold_analysis.average_coverage.toFixed(2)}%</div>
                   <div class="stat-label">Avg Coverage</div>
                 </div>
               </div>
-              <h4>Severity Distribution</h4>
-              <table><tr><th>Severity</th><th>Count</th></tr>`;
+              <h4>Severity Distribution</h4>`;
+            if (severityData.length > 0) {
+              html += `<div class="chart-container">${generateBarChartSVG(severityData, 400, 100)}</div>`;
+            }
+            html += `<table><tr><th>Severity</th><th>Count</th></tr>`;
             Object.entries(
               analytics.mold_analysis.severity_distribution,
             ).forEach(([severity, count]) => {
@@ -684,7 +1103,26 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
 
         case "defect_patterns":
           if (analytics.defect_patterns) {
-            html += `<h4>Defect Frequency</h4><table><tr><th>Defect Type</th><th>Count</th></tr>`;
+            const defectData = Object.entries(
+              analytics.defect_patterns.frequency,
+            ).map(([defect, count]) => {
+              const defectColors: Record<string, string> = {
+                poor_color_uniformity: "#FF9800",
+                color_discoloration: "#F44336",
+                acceptable_quality: "#FFC107",
+              };
+              return {
+                label: defect
+                  .replace(/_/g, " ")
+                  .replace(/\b\w/g, (l) => l.toUpperCase()),
+                value: count,
+                color: defectColors[defect] || "#888",
+              };
+            });
+
+            html += `<h4>Defect Frequency</h4>`;
+            html += `<div class="chart-container">${generateBarChartSVG(defectData, 500, 160)}</div>`;
+            html += `<table><tr><th>Defect Type</th><th>Count</th></tr>`;
             Object.entries(analytics.defect_patterns.frequency).forEach(
               ([defect, count]) => {
                 const label = defect
@@ -717,11 +1155,37 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
                   <div class="stat-label">Reject</div>
                 </div>
               </div>`;
+
             if (
               Object.keys(analytics.quality_classification.by_species).length >
               0
             ) {
-              html += `<h4>Quality by Species</h4><table><tr><th>Species</th><th>Export</th><th>Local</th><th>Reject</th><th>Total</th></tr>`;
+              const stackedData = Object.entries(
+                analytics.quality_classification.by_species,
+              ).map(([species, grades]) => ({
+                label: species,
+                segments: [
+                  {
+                    value: grades.Export.count,
+                    color: "#4CAF50",
+                    name: "Export",
+                  },
+                  {
+                    value: grades.Local.count,
+                    color: "#FFC107",
+                    name: "Local",
+                  },
+                  {
+                    value: grades.Reject.count,
+                    color: "#F44336",
+                    name: "Reject",
+                  },
+                ],
+              }));
+
+              html += `<h4>Quality by Species</h4>`;
+              html += `<div class="chart-container">${generateStackedBarChartSVG(stackedData, 500)}</div>`;
+              html += `<table><tr><th>Species</th><th>Export</th><th>Local</th><th>Reject</th><th>Total</th></tr>`;
               Object.entries(
                 analytics.quality_classification.by_species,
               ).forEach(([species, grades]) => {
@@ -738,7 +1202,56 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
 
         case "confidence_vs_color":
           if (analytics.quality_classification) {
-            html += `<h4>Species Analysis (Confidence vs Color Score)</h4>`;
+            // Generate scatter plot data
+            const scatterData: Array<{
+              x: number;
+              y: number;
+              label: string;
+              color: string;
+              size?: number;
+            }> = [];
+            Object.entries(analytics.quality_classification.by_species).forEach(
+              ([species, grades]) => {
+                if (grades.Export.count > 0) {
+                  scatterData.push({
+                    x: grades.Export.avg_color_score,
+                    y: grades.Export.avg_confidence * 100,
+                    label: `${species} (E)`,
+                    color: "#4CAF50",
+                    size: Math.min(Math.max(grades.Export.count, 5), 15),
+                  });
+                }
+                if (grades.Local.count > 0) {
+                  scatterData.push({
+                    x: grades.Local.avg_color_score,
+                    y: grades.Local.avg_confidence * 100,
+                    label: `${species} (L)`,
+                    color: "#FFC107",
+                    size: Math.min(Math.max(grades.Local.count, 5), 15),
+                  });
+                }
+                if (grades.Reject.count > 0) {
+                  scatterData.push({
+                    x: grades.Reject.avg_color_score,
+                    y: grades.Reject.avg_confidence * 100,
+                    label: `${species} (R)`,
+                    color: "#F44336",
+                    size: Math.min(Math.max(grades.Reject.count, 5), 15),
+                  });
+                }
+              },
+            );
+
+            html += `<div class="chart-container">${generateScatterPlotSVG(
+              scatterData,
+              500,
+              300,
+              "Color Score",
+              "Confidence",
+            )}</div>`;
+            html += `<p style="text-align: center; font-size: 11px; color: #666; margin-top: -10px;">E = Export, L = Local, R = Reject | Point size indicates sample count</p>`;
+
+            html += `<h4>Species Analysis Details</h4>`;
             html += `<table><tr><th>Species</th><th>Grade</th><th>Avg Confidence</th><th>Avg Color Score</th><th>Count</th></tr>`;
             Object.entries(analytics.quality_classification.by_species).forEach(
               ([species, grades]) => {
@@ -758,19 +1271,37 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
           break;
 
         case "daily_scans":
-          html += `<table><tr><th>Date</th><th>Scans</th></tr>`;
-          Object.entries(analytics.daily_scans)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .forEach(([date, count]) => {
-              const formattedDate = new Date(date).toLocaleDateString("en", {
-                year: "numeric",
-                month: "short",
-                day: "numeric",
+          {
+            const dailyData = Object.entries(analytics.daily_scans)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([date, count]) => ({
+                label: new Date(date).toLocaleDateString("en", {
+                  month: "short",
+                  day: "numeric",
+                }),
+                value: count,
+              }));
+
+            html += `<div class="chart-container">${generateLineChartSVG(dailyData, 500, 200)}</div>`;
+            html += `<table><tr><th>Date</th><th>Scans</th></tr>`;
+            Object.entries(analytics.daily_scans)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .forEach(([date, count]) => {
+                const formattedDate = new Date(date).toLocaleDateString("en", {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                });
+                html += `<tr><td>${formattedDate}</td><td>${count}</td></tr>`;
               });
-              html += `<tr><td>${formattedDate}</td><td>${count}</td></tr>`;
-            });
-          html += `</table>`;
+            html += `</table>`;
+          }
           break;
+      }
+
+      // Add detailed summary AFTER graphs for PDF and Word
+      if (format === "pdf" || format === "word") {
+        html += `<div class="summary">${getGraphSummary(graphId)}</div>`;
       }
 
       html += `</div>`;
@@ -917,18 +1448,16 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
           Alert.alert("Success", "File saved to documents folder");
         }
       } else {
-        // Generate PDF or Word (HTML-based)
+        // Generate HTML content for the report
         const html = generateReportHTML(format);
 
-        // Use expo-print to generate PDF
-        const { uri } = await Print.printToFileAsync({
-          html,
-          base64: false,
-        });
-
-        // For PDF, share directly from the generated URI
-        // For Word, we need to copy with a new extension
         if (format === "pdf") {
+          // Use expo-print to generate PDF from HTML
+          const { uri } = await Print.printToFileAsync({
+            html,
+            base64: false,
+          });
+
           if (await Sharing.isAvailableAsync()) {
             await Sharing.shareAsync(uri, {
               mimeType: "application/pdf",
@@ -938,19 +1467,19 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
             Alert.alert("Success", "File saved to documents folder");
           }
         } else {
-          // For Word format, copy to a new file with .html extension
-          const fileName = `daing_analytics_${Date.now()}.html`;
-          const newPath = `${LegacyFileSystem.documentDirectory}${fileName}`;
+          // For Word format, write HTML content directly to a .doc file
+          // Word can natively open HTML content when saved with .doc extension
+          const fileName = `daing_analytics_${Date.now()}.doc`;
+          const filePath = `${LegacyFileSystem.documentDirectory}${fileName}`;
 
-          await LegacyFileSystem.copyAsync({
-            from: uri,
-            to: newPath,
+          await LegacyFileSystem.writeAsStringAsync(filePath, html, {
+            encoding: LegacyFileSystem.EncodingType.UTF8,
           });
 
           if (await Sharing.isAvailableAsync()) {
-            await Sharing.shareAsync(newPath, {
-              mimeType: "text/html",
-              dialogTitle: "Export Analytics (Word/HTML)",
+            await Sharing.shareAsync(filePath, {
+              mimeType: "application/msword",
+              dialogTitle: "Export Analytics (Word Document)",
             });
           } else {
             Alert.alert("Success", "File saved to documents folder");
@@ -2644,6 +3173,11 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
               {selectedGraphs.length !== 1 ? "s" : ""} selected for export
             </Text>
 
+            <Text style={styles.formatNote}>
+              Note: Files will open in share menu to save or send. This is
+              required by mobile platforms for secure file access.
+            </Text>
+
             <View style={styles.formatOptions}>
               <TouchableOpacity
                 style={styles.formatOption}
@@ -2657,7 +3191,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
                 </View>
                 <Text style={styles.formatLabel}>PDF</Text>
                 <Text style={styles.formatDescription}>
-                  Best for printing and sharing. Includes headers and detailed
+                  Best for printing. Includes charts, headers, and detailed
                   summaries.
                 </Text>
               </TouchableOpacity>
@@ -2672,10 +3206,10 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
                 >
                   <Ionicons name="document" size={32} color="white" />
                 </View>
-                <Text style={styles.formatLabel}>Word (HTML)</Text>
+                <Text style={styles.formatLabel}>Document</Text>
                 <Text style={styles.formatDescription}>
-                  Editable format with headers and summaries. Opens in Word or
-                  browser.
+                  HTML format with charts and summaries. Editable in any browser
+                  or word processor.
                 </Text>
               </TouchableOpacity>
 
@@ -2689,10 +3223,9 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
                 >
                   <Ionicons name="grid" size={32} color="white" />
                 </View>
-                <Text style={styles.formatLabel}>Excel (CSV)</Text>
+                <Text style={styles.formatLabel}>Spreadsheet</Text>
                 <Text style={styles.formatDescription}>
-                  Spreadsheet format for data analysis. Import into Excel for
-                  charts.
+                  CSV format with raw data. Import into Excel or Google Sheets.
                 </Text>
               </TouchableOpacity>
             </View>
@@ -3772,6 +4305,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.textSecondary,
     paddingVertical: 12,
+  },
+  formatNote: {
+    textAlign: "center",
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    fontStyle: "italic",
   },
   formatOptions: {
     padding: 16,
