@@ -1,9 +1,27 @@
+# Core FastAPI
 fastapi
 uvicorn
 python-multipart
+python-dotenv
+
+# AI/ML
 numpy
 opencv-python
-cloudinary
-python-dotenv
 ultralytics
+
+# Database
 pymongo
+
+# Cloud Storage
+cloudinary
+
+# Authentication (web)
+bcrypt
+python-jose[cryptography]
+firebase-admin
+
+# Email
+email-validator
+
+# PDF Generation
+reportlab

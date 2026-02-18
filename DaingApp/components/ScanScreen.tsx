@@ -123,7 +123,12 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
             <Ionicons name="close" size={24} color={theme.colors.text} />
           </TouchableOpacity>
           <Text style={commonStyles.screenTitle}>Analysis Complete</Text>
-          <View style={{ width: 40 }} />
+          <TouchableOpacity
+            style={styles.shopButtonResult}
+            onPress={() => onNavigate("ecommerce")}
+          >
+            <Ionicons name="storefront" size={18} color="#fff" />
+          </TouchableOpacity>
         </View>
 
         {/* Result Image - Zoomable */}
@@ -367,7 +372,12 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.cameraTitle}>Scan Fish</Text>
-        <View style={{ width: 44 }} />
+        <TouchableOpacity
+          style={styles.shopButtonCamera}
+          onPress={() => onNavigate("ecommerce")}
+        >
+          <Ionicons name="storefront" size={20} color="#fff" />
+        </TouchableOpacity>
       </View>
 
       <CameraView style={commonStyles.camera} ref={cameraRef} />
@@ -434,6 +444,24 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     backgroundColor: "rgba(0, 0, 0, 0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  shopButtonCamera: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#10B981",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  shopButtonResult: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#10B981",
     justifyContent: "center",
     alignItems: "center",
   },

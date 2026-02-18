@@ -7,3 +7,4 @@ export { AutoDatasetScreen } from "./AutoDatasetScreen";
 export { ZoomableImage } from "./ZoomableImage";
 export { LoginScreen } from "./LoginScreen";
 export { RegisterScreen } from "./RegisterScreen";
+export { EcommerceScreen } from "./EcommerceScreen";

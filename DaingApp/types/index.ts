@@ -5,7 +5,8 @@ export type Screen =
   | "history"
   | "autoDataset"
   | "login"
-  | "register";
+  | "register"
+  | "ecommerce";
 
 export type UserRole = "user" | "admin" | "seller";
 
@@ -14,6 +15,25 @@ export interface User {
   username: string;
   email: string;
   role: UserRole;
+}
+
+export interface Product {
+  id: string;
+  seller_id: string;
+  seller_name: string;
+  name: string;
+  description: string;
+  price: number;
+  category_id: string | null;
+  category_name: string;
+  stock_qty: number;
+  status: string;
+  images: string[];
+  main_image_index: number;
+  is_disabled: boolean;
+  sold_count: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AuthState {

@@ -2,6 +2,10 @@
 export const DEFAULT_SERVER_BASE_URL =
   "https://presenting-url-geneva-powerful.trycloudflare.com"; //http://192.168.1.109:8000
 
+// Web app URL for e-commerce (uses same backend)
+// Points to catalog page for direct shop access
+export const DEFAULT_WEB_APP_URL = "http://localhost:5173/catalog";
+
 const normalizeBaseUrl = (baseUrl: string) =>
   baseUrl.trim().replace(/\/+$/, "");
 

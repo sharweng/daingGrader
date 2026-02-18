@@ -19,6 +19,7 @@ import { AutoDatasetScreen } from "../components/AutoDatasetScreen";
 import { SettingsModal } from "../components/SettingsModal";
 import { LoginScreen } from "../components/LoginScreen";
 import { RegisterScreen } from "../components/RegisterScreen";
+import { EcommerceScreen } from "../components/EcommerceScreen";
 import { takePicture } from "../utils/camera";
 import { analyzeFish, fetchHistory } from "../services/api";
 import { DEFAULT_SERVER_BASE_URL, getServerUrls } from "../constants/config";
@@ -295,6 +296,15 @@ export default function Index() {
       <AutoDatasetScreen
         onNavigate={setCurrentScreen}
         autoDatasetUrl={serverUrls.autoDataset}
+      />
+    );
+  }
+
+  if (currentScreen === "ecommerce") {
+    return (
+      <EcommerceScreen
+        onNavigate={setCurrentScreen}
+        serverBaseUrl={serverBaseUrl}
       />
     );
   }

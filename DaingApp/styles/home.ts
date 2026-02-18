@@ -80,6 +80,22 @@ export const homeStyles = StyleSheet.create({
     maxWidth: 80,
   },
 
+  // Header left container with shop button
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  shopButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#10B981",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   // Hamburger menu styles
   menuOverlay: {
     flex: 1,

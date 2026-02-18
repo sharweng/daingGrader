@@ -30,19 +30,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     <View style={homeStyles.homeContainer}>
       {/* HEADER */}
       <View style={homeStyles.header}>
-        {/* User info (compact) */}
-        {user ? (
-          <View style={homeStyles.headerUserInfo}>
-            <View style={homeStyles.headerUserAvatar}>
-              <Ionicons name="person" size={14} color="#fff" />
-            </View>
-            <Text style={homeStyles.headerUserName} numberOfLines={1}>
-              {user.username}
-            </Text>
-          </View>
-        ) : (
-          <View style={{ width: 44 }} />
-        )}
+        {/* Shop button */}
+        <TouchableOpacity
+          style={homeStyles.shopButton}
+          onPress={() => onNavigate("ecommerce")}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="storefront" size={18} color="#fff" />
+        </TouchableOpacity>
         <Text style={homeStyles.appTitle}>DaingGrader</Text>
         <TouchableOpacity
           style={homeStyles.menuButton}
