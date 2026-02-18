@@ -8,6 +8,9 @@ import {
   Dimensions,
   RefreshControl,
   ActivityIndicator,
+  Modal,
+  Alert,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, {
@@ -18,13 +21,91 @@ import Svg, {
   Text as SvgText,
   Polyline,
 } from "react-native-svg";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
+import * as LegacyFileSystem from "expo-file-system/legacy";
 import { commonStyles, theme } from "../styles/common";
 import { fetchAnalytics, fetchAllAnalytics } from "../services/api";
 import type { Screen, AnalyticsSummary, User } from "../types";
 
+// Graph types that can be selected for export
+type GraphType =
+  | "detection_overview"
+  | "fish_type_distribution"
+  | "average_confidence"
+  | "color_consistency"
+  | "mold_analysis"
+  | "defect_patterns"
+  | "quality_classification"
+  | "confidence_vs_color"
+  | "daily_scans"
+  | "fish_type_pie";
+
+interface GraphOption {
+  id: GraphType;
+  label: string;
+  description: string;
+}
+
+type ExportFormat = "pdf" | "word" | "excel";
+
 const screenWidth = Dimensions.get("window").width;
 
 type AnalyticsTab = "my" | "all";
+
+// Available graphs for export
+const AVAILABLE_GRAPHS: GraphOption[] = [
+  {
+    id: "detection_overview",
+    label: "Detection Overview",
+    description: "Daing vs Non-Daing distribution pie chart",
+  },
+  {
+    id: "fish_type_distribution",
+    label: "Fish Type Distribution",
+    description: "Bar chart showing count per fish species",
+  },
+  {
+    id: "average_confidence",
+    label: "Average Confidence",
+    description: "Detection confidence scores by fish type",
+  },
+  {
+    id: "color_consistency",
+    label: "Color Consistency Analysis",
+    description: "Color quality scores and grade distribution",
+  },
+  {
+    id: "mold_analysis",
+    label: "Mold Analysis",
+    description: "Contamination severity and spatial distribution",
+  },
+  {
+    id: "defect_patterns",
+    label: "Defect Patterns",
+    description: "Defect frequency and species susceptibility",
+  },
+  {
+    id: "quality_classification",
+    label: "Quality Classification",
+    description: "Export/Local/Reject grade breakdown",
+  },
+  {
+    id: "confidence_vs_color",
+    label: "Confidence vs Color Score",
+    description: "Scatter plot correlation analysis",
+  },
+  {
+    id: "daily_scans",
+    label: "Daily Scans Trend",
+    description: "Line graph showing scan activity over time",
+  },
+  {
+    id: "fish_type_pie",
+    label: "Fish Type Pie Chart",
+    description: "Donut chart of fish species distribution",
+  },
+];
 
 interface AnalyticsScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -79,6 +160,12 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<AnalyticsTab>("my");
   const [selectedDays, setSelectedDays] = useState<number>(7);
+
+  // Download/Export state
+  const [showGraphSelectModal, setShowGraphSelectModal] = useState(false);
+  const [showFormatSelectModal, setShowFormatSelectModal] = useState(false);
+  const [selectedGraphs, setSelectedGraphs] = useState<GraphType[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
 
   const isLoggedIn = !!user;
   const isAdmin = user?.role === "admin";
@@ -142,6 +229,763 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
     )
       return 1;
     return Math.max(...Object.values(analytics.fish_type_distribution));
+  };
+
+  // Check which graphs have data
+  const hasGraphData = (graphId: GraphType): boolean => {
+    if (!analytics) return false;
+    switch (graphId) {
+      case "detection_overview":
+        return analytics.total_scans > 0;
+      case "fish_type_distribution":
+        return Object.keys(analytics.fish_type_distribution).length > 0;
+      case "average_confidence":
+        return Object.keys(analytics.average_confidence).length > 0;
+      case "color_consistency":
+        return !!(
+          analytics.color_consistency &&
+          analytics.color_consistency.average_score > 0
+        );
+      case "mold_analysis":
+        return !!analytics.mold_analysis;
+      case "defect_patterns":
+        return !!analytics.defect_patterns;
+      case "quality_classification":
+        return !!analytics.quality_classification;
+      case "confidence_vs_color":
+        return !!(
+          analytics.quality_classification &&
+          Object.keys(analytics.quality_classification.by_species).length > 0
+        );
+      case "daily_scans":
+        return Object.keys(analytics.daily_scans).length > 0;
+      case "fish_type_pie":
+        return Object.keys(analytics.fish_type_distribution).length > 0;
+      default:
+        return false;
+    }
+  };
+
+  // Get available graphs with data
+  const getAvailableGraphs = () =>
+    AVAILABLE_GRAPHS.filter((g) => hasGraphData(g.id));
+
+  // Toggle graph selection
+  const toggleGraphSelection = (graphId: GraphType) => {
+    setSelectedGraphs((prev) =>
+      prev.includes(graphId)
+        ? prev.filter((id) => id !== graphId)
+        : [...prev, graphId],
+    );
+  };
+
+  // Toggle select all / deselect all
+  const toggleSelectAll = () => {
+    const available = getAvailableGraphs();
+    const allSelected = selectedGraphs.length === available.length;
+    if (allSelected) {
+      setSelectedGraphs([]);
+    } else {
+      setSelectedGraphs(available.map((g) => g.id));
+    }
+  };
+
+  // Generate summary for each graph
+  const getGraphSummary = (graphId: GraphType): string => {
+    if (!analytics) return "";
+
+    switch (graphId) {
+      case "detection_overview":
+        const daingPct =
+          analytics.total_scans > 0
+            ? ((analytics.daing_scans / analytics.total_scans) * 100).toFixed(1)
+            : "0";
+        const nonDaingPct =
+          analytics.total_scans > 0
+            ? (
+                (analytics.non_daing_scans / analytics.total_scans) *
+                100
+              ).toFixed(1)
+            : "0";
+        return `Out of ${analytics.total_scans} total scans, ${analytics.daing_scans} (${daingPct}%) were identified as Daing (dried fish), while ${analytics.non_daing_scans} (${nonDaingPct}%) were classified as Non-Daing. This breakdown helps assess the overall detection accuracy and the proportion of valid dried fish samples in the dataset.`;
+
+      case "fish_type_distribution":
+        const fishTypes = Object.entries(analytics.fish_type_distribution).sort(
+          ([, a], [, b]) => b - a,
+        );
+        const topFish = fishTypes
+          .slice(0, 3)
+          .map(([type, count]) => `${type} (${count})`)
+          .join(", ");
+        return `The fish type distribution shows ${fishTypes.length} different species detected. The most commonly identified types are: ${topFish}. This data provides insights into the variety of dried fish being processed and which species are most prevalent in the scanned samples.`;
+
+      case "average_confidence":
+        const confEntries = Object.entries(analytics.average_confidence);
+        const avgOverall =
+          confEntries.length > 0
+            ? (
+                (confEntries.reduce((sum, [, conf]) => sum + conf, 0) /
+                  confEntries.length) *
+                100
+              ).toFixed(1)
+            : "0";
+        const highestConf =
+          confEntries.length > 0
+            ? confEntries.sort(([, a], [, b]) => b - a)[0]
+            : null;
+        return `The detection confidence analysis shows an overall average of ${avgOverall}% across all fish types. ${highestConf ? `${highestConf[0]} has the highest detection confidence at ${(highestConf[1] * 100).toFixed(1)}%.` : ""} Higher confidence scores indicate more reliable detections, helping identify which fish types are most consistently recognized by the system.`;
+
+      case "color_consistency":
+        if (!analytics.color_consistency) return "";
+        const colorScore = analytics.color_consistency.average_score.toFixed(1);
+        const grades = analytics.color_consistency.grade_distribution;
+        const totalGraded = grades.Export + grades.Local + grades.Reject;
+        const exportPct =
+          totalGraded > 0
+            ? ((grades.Export / totalGraded) * 100).toFixed(1)
+            : "0";
+        return `The color consistency analysis reveals an average score of ${colorScore}%, indicating the uniformity of color distribution across samples. Grade distribution shows ${exportPct}% Export quality, ${totalGraded > 0 ? ((grades.Local / totalGraded) * 100).toFixed(1) : "0"}% Local quality, and ${totalGraded > 0 ? ((grades.Reject / totalGraded) * 100).toFixed(1) : "0"}% Reject. Higher color consistency correlates with better processing quality and market value.`;
+
+      case "mold_analysis":
+        if (!analytics.mold_analysis) return "";
+        const moldCoverage =
+          analytics.mold_analysis.average_coverage.toFixed(2);
+        const severityDist = analytics.mold_analysis.severity_distribution;
+        const contaminated =
+          (severityDist.Low || 0) +
+          (severityDist.Moderate || 0) +
+          (severityDist.Severe || 0);
+        return `Mold contamination analysis shows an average coverage of ${moldCoverage}% across all samples. Severity distribution indicates ${contaminated} contaminated samples: ${severityDist.Low || 0} Low, ${severityDist.Moderate || 0} Moderate, and ${severityDist.Severe || 0} Severe cases. This analysis helps identify potential food safety concerns and storage issues affecting product quality.`;
+
+      case "defect_patterns":
+        if (!analytics.defect_patterns) return "";
+        const freq = analytics.defect_patterns.frequency;
+        const mostCommon =
+          analytics.defect_patterns.most_common_defect || "None identified";
+        return `Defect pattern analysis identified the following issues: ${freq.poor_color_uniformity || 0} cases of poor color uniformity, ${freq.color_discoloration || 0} cases of discoloration, and ${freq.acceptable_quality || 0} samples with acceptable quality. The most common defect observed is "${mostCommon.replace(/_/g, " ")}". This data helps identify areas for improvement in production and quality control processes.`;
+
+      case "quality_classification":
+        if (!analytics.quality_classification) return "";
+        const summary = analytics.quality_classification.summary;
+        return `Quality grade classification reveals that ${summary.export_rate.toFixed(1)}% of samples meet Export standards (highest quality), ${summary.local_rate.toFixed(1)}% qualify for Local market sale, and ${summary.reject_rate.toFixed(1)}% are rejected. This classification system helps producers meet market requirements and maintain consistent quality standards for different distribution channels.`;
+
+      case "confidence_vs_color":
+        if (!analytics.quality_classification) return "";
+        const speciesCount = Object.keys(
+          analytics.quality_classification.by_species,
+        ).length;
+        return `The scatter plot visualization correlates detection confidence with color consistency scores across ${speciesCount} fish species. This analysis helps identify patterns between detection reliability and visual quality indicators. Species with both high confidence and color scores represent the most consistently processed samples, while outliers may indicate processing or detection issues.`;
+
+      case "daily_scans":
+        const dailyEntries = Object.entries(analytics.daily_scans);
+        const totalDaily = dailyEntries.reduce(
+          (sum, [, count]) => sum + count,
+          0,
+        );
+        const avgDaily =
+          dailyEntries.length > 0
+            ? (totalDaily / dailyEntries.length).toFixed(1)
+            : "0";
+        const peakDay =
+          dailyEntries.length > 0
+            ? dailyEntries.sort(([, a], [, b]) => b - a)[0]
+            : null;
+        return `Daily scan activity over the selected period shows an average of ${avgDaily} scans per day. ${peakDay ? `Peak activity occurred on ${new Date(peakDay[0]).toLocaleDateString("en", { month: "long", day: "numeric" })} with ${peakDay[1]} scans.` : ""} This trend data helps monitor system usage patterns and identify periods of high or low activity for resource planning.`;
+
+      case "fish_type_pie":
+        const totalFish = Object.values(
+          analytics.fish_type_distribution,
+        ).reduce((a, b) => a + b, 0);
+        const topSpecies = Object.entries(analytics.fish_type_distribution)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 3)
+          .map(
+            ([type, count]) =>
+              `${type} (${((count / totalFish) * 100).toFixed(1)}%)`,
+          );
+        return `The fish type distribution pie chart visualizes the proportion of each species in the dataset. With ${totalFish} total fish detected, the dominant species are: ${topSpecies.join(", ")}. This visualization provides a quick overview of species composition for inventory and market analysis purposes.`;
+
+      default:
+        return "";
+    }
+  };
+
+  // Generate HTML report content
+  const generateReportHTML = (format: ExportFormat): string => {
+    if (!analytics) return "";
+
+    const timeRange =
+      timeRangeOptions.find((o) => o.value === selectedDays)?.label || "7 Days";
+    const reportDate = new Date().toLocaleDateString("en", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    const reportTime = new Date().toLocaleTimeString("en", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const headerStyles = `
+      body { 
+        font-family: Arial, sans-serif; 
+        padding: 20px; 
+        color: #333;
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      .header { 
+        text-align: center; 
+        border-bottom: 3px solid #4CAF50; 
+        padding-bottom: 20px; 
+        margin-bottom: 30px;
+      }
+      .header h1 { 
+        color: #1a1a2e; 
+        margin-bottom: 8px;
+        font-size: 28px;
+      }
+      .header .subtitle { 
+        color: #666; 
+        font-size: 14px; 
+      }
+      .header .meta {
+        color: #888;
+        font-size: 12px;
+        margin-top: 10px;
+      }
+      .section { 
+        margin-bottom: 30px; 
+        page-break-inside: avoid;
+      }
+      .section-title { 
+        background: linear-gradient(135deg, #4CAF50, #2E7D32);
+        color: white; 
+        padding: 12px 16px; 
+        border-radius: 8px;
+        margin-bottom: 15px;
+        font-size: 16px;
+      }
+      .summary { 
+        background: #f8f9fa; 
+        padding: 15px; 
+        border-radius: 8px;
+        border-left: 4px solid #4CAF50;
+        line-height: 1.7;
+        font-size: 14px;
+        color: #444;
+      }
+      table { 
+        width: 100%; 
+        border-collapse: collapse; 
+        margin-top: 15px;
+        font-size: 13px;
+      }
+      th, td { 
+        border: 1px solid #ddd; 
+        padding: 10px; 
+        text-align: left; 
+      }
+      th { 
+        background-color: #4CAF50; 
+        color: white; 
+      }
+      tr:nth-child(even) { 
+        background-color: #f8f9fa; 
+      }
+      .stats-grid { 
+        display: grid; 
+        grid-template-columns: repeat(3, 1fr); 
+        gap: 15px; 
+        margin-bottom: 15px;
+      }
+      .stat-card { 
+        background: #f8f9fa; 
+        padding: 15px; 
+        border-radius: 8px; 
+        text-align: center;
+        border: 1px solid #e0e0e0;
+      }
+      .stat-value { 
+        font-size: 24px; 
+        font-weight: bold; 
+        color: #4CAF50; 
+      }
+      .stat-label { 
+        font-size: 12px; 
+        color: #666; 
+        margin-top: 5px;
+      }
+      .bar-container { 
+        margin: 8px 0; 
+      }
+      .bar-label { 
+        display: inline-block; 
+        width: 120px; 
+        font-size: 13px;
+      }
+      .bar-track { 
+        display: inline-block; 
+        width: 60%; 
+        height: 20px; 
+        background: #e0e0e0; 
+        border-radius: 10px; 
+        vertical-align: middle;
+        overflow: hidden;
+      }
+      .bar-fill { 
+        height: 100%; 
+        background: #4CAF50; 
+        border-radius: 10px; 
+      }
+      .bar-value { 
+        display: inline-block; 
+        width: 60px; 
+        text-align: right;
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .footer {
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #ddd;
+        text-align: center;
+        color: #888;
+        font-size: 11px;
+      }
+    `;
+
+    let html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Daing Analytics Report</title>
+        <style>${headerStyles}</style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>🐟 Daing Analytics Report</h1>
+          <div class="subtitle">${activeTab === "all" ? "Overall System Analytics" : "Personal Analytics"} - ${timeRange} Overview</div>
+          <div class="meta">Generated on ${reportDate} at ${reportTime}${user ? ` • By ${user.username}` : ""}</div>
+        </div>
+    `;
+
+    // Generate sections for each selected graph
+    selectedGraphs.forEach((graphId) => {
+      const graphInfo = AVAILABLE_GRAPHS.find((g) => g.id === graphId);
+      if (!graphInfo || !hasGraphData(graphId)) return;
+
+      html += `<div class="section">`;
+      html += `<div class="section-title">${graphInfo.label}</div>`;
+
+      // Add detailed summary for PDF and Word
+      if (format === "pdf" || format === "word") {
+        html += `<div class="summary">${getGraphSummary(graphId)}</div>`;
+      }
+
+      // Add data tables/visuals
+      switch (graphId) {
+        case "detection_overview":
+          html += `
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-value">${analytics.total_scans}</div>
+                <div class="stat-label">Total Scans</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" style="color: #4CAF50;">${analytics.daing_scans}</div>
+                <div class="stat-label">Daing Detected</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" style="color: #F44336;">${analytics.non_daing_scans}</div>
+                <div class="stat-label">Non-Daing</div>
+              </div>
+            </div>
+          `;
+          break;
+
+        case "fish_type_distribution":
+        case "fish_type_pie":
+          html += `<table><tr><th>Fish Type</th><th>Count</th><th>Percentage</th></tr>`;
+          const totalDist = Object.values(
+            analytics.fish_type_distribution,
+          ).reduce((a, b) => a + b, 0);
+          Object.entries(analytics.fish_type_distribution)
+            .sort(([, a], [, b]) => b - a)
+            .forEach(([type, count]) => {
+              const pct =
+                totalDist > 0 ? ((count / totalDist) * 100).toFixed(1) : "0";
+              html += `<tr><td>${type}</td><td>${count}</td><td>${pct}%</td></tr>`;
+            });
+          html += `</table>`;
+          break;
+
+        case "average_confidence":
+          html += `<table><tr><th>Fish Type</th><th>Average Confidence</th></tr>`;
+          Object.entries(analytics.average_confidence)
+            .sort(([, a], [, b]) => b - a)
+            .forEach(([type, conf]) => {
+              html += `<tr><td>${type}</td><td>${(conf * 100).toFixed(1)}%</td></tr>`;
+            });
+          html += `</table>`;
+          break;
+
+        case "color_consistency":
+          if (analytics.color_consistency) {
+            html += `
+              <div class="stats-grid">
+                <div class="stat-card">
+                  <div class="stat-value">${analytics.color_consistency.average_score.toFixed(1)}%</div>
+                  <div class="stat-label">Average Score</div>
+                </div>
+              </div>
+              <h4>Grade Distribution</h4>
+              <table><tr><th>Grade</th><th>Count</th></tr>`;
+            Object.entries(
+              analytics.color_consistency.grade_distribution,
+            ).forEach(([grade, count]) => {
+              html += `<tr><td>${grade}</td><td>${count}</td></tr>`;
+            });
+            html += `</table>`;
+            if (
+              Object.keys(analytics.color_consistency.by_fish_type).length > 0
+            ) {
+              html += `<h4>By Fish Type</h4><table><tr><th>Fish Type</th><th>Avg Score</th><th>Count</th></tr>`;
+              Object.entries(analytics.color_consistency.by_fish_type)
+                .sort(([, a], [, b]) => b.avg_score - a.avg_score)
+                .forEach(([type, data]) => {
+                  html += `<tr><td>${type}</td><td>${data.avg_score.toFixed(1)}%</td><td>${data.count}</td></tr>`;
+                });
+              html += `</table>`;
+            }
+          }
+          break;
+
+        case "mold_analysis":
+          if (analytics.mold_analysis) {
+            html += `
+              <div class="stats-grid">
+                <div class="stat-card">
+                  <div class="stat-value" style="color: #F44336;">${analytics.mold_analysis.average_coverage.toFixed(2)}%</div>
+                  <div class="stat-label">Avg Coverage</div>
+                </div>
+              </div>
+              <h4>Severity Distribution</h4>
+              <table><tr><th>Severity</th><th>Count</th></tr>`;
+            Object.entries(
+              analytics.mold_analysis.severity_distribution,
+            ).forEach(([severity, count]) => {
+              html += `<tr><td>${severity}</td><td>${count}</td></tr>`;
+            });
+            html += `</table>`;
+          }
+          break;
+
+        case "defect_patterns":
+          if (analytics.defect_patterns) {
+            html += `<h4>Defect Frequency</h4><table><tr><th>Defect Type</th><th>Count</th></tr>`;
+            Object.entries(analytics.defect_patterns.frequency).forEach(
+              ([defect, count]) => {
+                const label = defect
+                  .replace(/_/g, " ")
+                  .replace(/\b\w/g, (l) => l.toUpperCase());
+                html += `<tr><td>${label}</td><td>${count}</td></tr>`;
+              },
+            );
+            html += `</table>`;
+            if (analytics.defect_patterns.most_common_defect) {
+              html += `<p><strong>Most Common Defect:</strong> ${analytics.defect_patterns.most_common_defect.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}</p>`;
+            }
+          }
+          break;
+
+        case "quality_classification":
+          if (analytics.quality_classification) {
+            html += `
+              <div class="stats-grid">
+                <div class="stat-card">
+                  <div class="stat-value" style="color: #4CAF50;">${analytics.quality_classification.summary.export_rate.toFixed(1)}%</div>
+                  <div class="stat-label">Export Grade</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-value" style="color: #FFC107;">${analytics.quality_classification.summary.local_rate.toFixed(1)}%</div>
+                  <div class="stat-label">Local Grade</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-value" style="color: #F44336;">${analytics.quality_classification.summary.reject_rate.toFixed(1)}%</div>
+                  <div class="stat-label">Reject</div>
+                </div>
+              </div>`;
+            if (
+              Object.keys(analytics.quality_classification.by_species).length >
+              0
+            ) {
+              html += `<h4>Quality by Species</h4><table><tr><th>Species</th><th>Export</th><th>Local</th><th>Reject</th><th>Total</th></tr>`;
+              Object.entries(
+                analytics.quality_classification.by_species,
+              ).forEach(([species, grades]) => {
+                const total =
+                  grades.Export.count +
+                  grades.Local.count +
+                  grades.Reject.count;
+                html += `<tr><td>${species}</td><td>${grades.Export.count}</td><td>${grades.Local.count}</td><td>${grades.Reject.count}</td><td>${total}</td></tr>`;
+              });
+              html += `</table>`;
+            }
+          }
+          break;
+
+        case "confidence_vs_color":
+          if (analytics.quality_classification) {
+            html += `<h4>Species Analysis (Confidence vs Color Score)</h4>`;
+            html += `<table><tr><th>Species</th><th>Grade</th><th>Avg Confidence</th><th>Avg Color Score</th><th>Count</th></tr>`;
+            Object.entries(analytics.quality_classification.by_species).forEach(
+              ([species, grades]) => {
+                if (grades.Export.count > 0) {
+                  html += `<tr><td>${species}</td><td>Export</td><td>${(grades.Export.avg_confidence * 100).toFixed(1)}%</td><td>${grades.Export.avg_color_score.toFixed(1)}%</td><td>${grades.Export.count}</td></tr>`;
+                }
+                if (grades.Local.count > 0) {
+                  html += `<tr><td>${species}</td><td>Local</td><td>${(grades.Local.avg_confidence * 100).toFixed(1)}%</td><td>${grades.Local.avg_color_score.toFixed(1)}%</td><td>${grades.Local.count}</td></tr>`;
+                }
+                if (grades.Reject.count > 0) {
+                  html += `<tr><td>${species}</td><td>Reject</td><td>${(grades.Reject.avg_confidence * 100).toFixed(1)}%</td><td>${grades.Reject.avg_color_score.toFixed(1)}%</td><td>${grades.Reject.count}</td></tr>`;
+                }
+              },
+            );
+            html += `</table>`;
+          }
+          break;
+
+        case "daily_scans":
+          html += `<table><tr><th>Date</th><th>Scans</th></tr>`;
+          Object.entries(analytics.daily_scans)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .forEach(([date, count]) => {
+              const formattedDate = new Date(date).toLocaleDateString("en", {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+              });
+              html += `<tr><td>${formattedDate}</td><td>${count}</td></tr>`;
+            });
+          html += `</table>`;
+          break;
+      }
+
+      html += `</div>`;
+    });
+
+    html += `
+        <div class="footer">
+          <p>This report was automatically generated by the Daing Grader Analytics System.</p>
+          <p>© ${new Date().getFullYear()} Daing Grader - Fish Quality Assessment Platform</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return html;
+  };
+
+  // Generate CSV content for Excel
+  const generateCSVContent = (): string => {
+    if (!analytics) return "";
+
+    let csv = "Daing Analytics Report\n";
+    csv += `Generated: ${new Date().toLocaleString()}\n`;
+    csv += `Time Range: ${timeRangeOptions.find((o) => o.value === selectedDays)?.label || "7 Days"}\n\n`;
+
+    selectedGraphs.forEach((graphId) => {
+      if (!hasGraphData(graphId)) return;
+      const graphInfo = AVAILABLE_GRAPHS.find((g) => g.id === graphId);
+      if (!graphInfo) return;
+
+      csv += `\n--- ${graphInfo.label} ---\n`;
+
+      switch (graphId) {
+        case "detection_overview":
+          csv += "Metric,Value\n";
+          csv += `Total Scans,${analytics.total_scans}\n`;
+          csv += `Daing Scans,${analytics.daing_scans}\n`;
+          csv += `Non-Daing Scans,${analytics.non_daing_scans}\n`;
+          break;
+
+        case "fish_type_distribution":
+        case "fish_type_pie":
+          csv += "Fish Type,Count,Percentage\n";
+          const total = Object.values(analytics.fish_type_distribution).reduce(
+            (a, b) => a + b,
+            0,
+          );
+          Object.entries(analytics.fish_type_distribution)
+            .sort(([, a], [, b]) => b - a)
+            .forEach(([type, count]) => {
+              csv += `${type},${count},${total > 0 ? ((count / total) * 100).toFixed(1) : 0}%\n`;
+            });
+          break;
+
+        case "average_confidence":
+          csv += "Fish Type,Average Confidence\n";
+          Object.entries(analytics.average_confidence)
+            .sort(([, a], [, b]) => b - a)
+            .forEach(([type, conf]) => {
+              csv += `${type},${(conf * 100).toFixed(1)}%\n`;
+            });
+          break;
+
+        case "color_consistency":
+          if (analytics.color_consistency) {
+            csv += `Average Score,${analytics.color_consistency.average_score.toFixed(1)}%\n\n`;
+            csv += "Grade,Count\n";
+            Object.entries(
+              analytics.color_consistency.grade_distribution,
+            ).forEach(([grade, count]) => {
+              csv += `${grade},${count}\n`;
+            });
+          }
+          break;
+
+        case "mold_analysis":
+          if (analytics.mold_analysis) {
+            csv += `Average Coverage,${analytics.mold_analysis.average_coverage.toFixed(2)}%\n\n`;
+            csv += "Severity,Count\n";
+            Object.entries(
+              analytics.mold_analysis.severity_distribution,
+            ).forEach(([severity, count]) => {
+              csv += `${severity},${count}\n`;
+            });
+          }
+          break;
+
+        case "defect_patterns":
+          if (analytics.defect_patterns) {
+            csv += "Defect Type,Count\n";
+            Object.entries(analytics.defect_patterns.frequency).forEach(
+              ([defect, count]) => {
+                csv += `${defect.replace(/_/g, " ")},${count}\n`;
+              },
+            );
+          }
+          break;
+
+        case "quality_classification":
+          if (analytics.quality_classification) {
+            csv += "Grade,Rate\n";
+            csv += `Export,${analytics.quality_classification.summary.export_rate.toFixed(1)}%\n`;
+            csv += `Local,${analytics.quality_classification.summary.local_rate.toFixed(1)}%\n`;
+            csv += `Reject,${analytics.quality_classification.summary.reject_rate.toFixed(1)}%\n`;
+          }
+          break;
+
+        case "daily_scans":
+          csv += "Date,Scans\n";
+          Object.entries(analytics.daily_scans)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .forEach(([date, count]) => {
+              csv += `${date},${count}\n`;
+            });
+          break;
+      }
+    });
+
+    return csv;
+  };
+
+  // Export report
+  const exportReport = async (format: ExportFormat) => {
+    setIsExporting(true);
+    setShowFormatSelectModal(false);
+
+    try {
+      if (format === "excel") {
+        // Generate CSV for Excel
+        const csvContent = generateCSVContent();
+        const fileName = `daing_analytics_${Date.now()}.csv`;
+        const filePath = `${LegacyFileSystem.documentDirectory}${fileName}`;
+
+        await LegacyFileSystem.writeAsStringAsync(filePath, csvContent, {
+          encoding: LegacyFileSystem.EncodingType.UTF8,
+        });
+
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(filePath, {
+            mimeType: "text/csv",
+            dialogTitle: "Export Analytics (CSV for Excel)",
+          });
+        } else {
+          Alert.alert("Success", "File saved to documents folder");
+        }
+      } else {
+        // Generate PDF or Word (HTML-based)
+        const html = generateReportHTML(format);
+
+        // Use expo-print to generate PDF
+        const { uri } = await Print.printToFileAsync({
+          html,
+          base64: false,
+        });
+
+        // For PDF, share directly from the generated URI
+        // For Word, we need to copy with a new extension
+        if (format === "pdf") {
+          if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(uri, {
+              mimeType: "application/pdf",
+              dialogTitle: "Export Analytics (PDF)",
+            });
+          } else {
+            Alert.alert("Success", "File saved to documents folder");
+          }
+        } else {
+          // For Word format, copy to a new file with .html extension
+          const fileName = `daing_analytics_${Date.now()}.html`;
+          const newPath = `${LegacyFileSystem.documentDirectory}${fileName}`;
+
+          await LegacyFileSystem.copyAsync({
+            from: uri,
+            to: newPath,
+          });
+
+          if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(newPath, {
+              mimeType: "text/html",
+              dialogTitle: "Export Analytics (Word/HTML)",
+            });
+          } else {
+            Alert.alert("Success", "File saved to documents folder");
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Export error:", error);
+      Alert.alert(
+        "Export Failed",
+        "Unable to generate the report. Please try again.",
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Open download modal
+  const openDownloadModal = () => {
+    // Reset selection and show graph select modal
+    setSelectedGraphs([]);
+    setShowGraphSelectModal(true);
+  };
+
+  // Proceed to format selection
+  const proceedToFormatSelection = () => {
+    if (selectedGraphs.length === 0) {
+      Alert.alert(
+        "No Graphs Selected",
+        "Please select at least one graph to include in the report.",
+      );
+      return;
+    }
+    setShowGraphSelectModal(false);
+    setShowFormatSelectModal(true);
   };
 
   if (loading) {
@@ -217,9 +1061,23 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
           <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={commonStyles.screenTitle}>Analytics</Text>
-        <TouchableOpacity style={styles.headerButton} onPress={onRefresh}>
-          <Ionicons name="refresh" size={22} color={theme.colors.text} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          {isAdmin && (
+            <TouchableOpacity
+              style={[styles.headerButton, styles.downloadButton]}
+              onPress={openDownloadModal}
+            >
+              <Ionicons
+                name="download-outline"
+                size={22}
+                color={theme.colors.primary}
+              />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={styles.headerButton} onPress={onRefresh}>
+            <Ionicons name="refresh" size={22} color={theme.colors.text} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Tab Bar for Logged-in Users */}
@@ -1640,6 +2498,214 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
         {/* Bottom padding */}
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Graph Selection Modal */}
+      <Modal
+        visible={showGraphSelectModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowGraphSelectModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Graphs to Export</Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowGraphSelectModal(false)}
+              >
+                <Ionicons name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.selectAllContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.selectAllButton,
+                  selectedGraphs.length === getAvailableGraphs().length &&
+                    styles.selectAllButtonActive,
+                ]}
+                onPress={toggleSelectAll}
+              >
+                <Ionicons
+                  name={
+                    selectedGraphs.length === getAvailableGraphs().length
+                      ? "checkbox"
+                      : "square-outline"
+                  }
+                  size={18}
+                  color={
+                    selectedGraphs.length === getAvailableGraphs().length
+                      ? theme.colors.primary
+                      : theme.colors.textMuted
+                  }
+                />
+                <Text
+                  style={[
+                    styles.selectAllText,
+                    selectedGraphs.length !== getAvailableGraphs().length &&
+                      styles.selectAllTextInactive,
+                  ]}
+                >
+                  {selectedGraphs.length === getAvailableGraphs().length
+                    ? "Deselect All"
+                    : "Select All"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.graphListContainer}>
+              {getAvailableGraphs().map((graph) => (
+                <TouchableOpacity
+                  key={graph.id}
+                  style={[
+                    styles.graphOption,
+                    selectedGraphs.includes(graph.id) &&
+                      styles.graphOptionSelected,
+                  ]}
+                  onPress={() => toggleGraphSelection(graph.id)}
+                >
+                  <View style={styles.graphCheckbox}>
+                    <Ionicons
+                      name={
+                        selectedGraphs.includes(graph.id)
+                          ? "checkbox"
+                          : "square-outline"
+                      }
+                      size={22}
+                      color={
+                        selectedGraphs.includes(graph.id)
+                          ? theme.colors.primary
+                          : theme.colors.textMuted
+                      }
+                    />
+                  </View>
+                  <View style={styles.graphInfo}>
+                    <Text style={styles.graphLabel}>{graph.label}</Text>
+                    <Text style={styles.graphDescription}>
+                      {graph.description}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <Text style={styles.selectedCount}>
+                {selectedGraphs.length} of {getAvailableGraphs().length}{" "}
+                selected
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.proceedButton,
+                  selectedGraphs.length === 0 && styles.proceedButtonDisabled,
+                ]}
+                onPress={proceedToFormatSelection}
+              >
+                <Text style={styles.proceedButtonText}>
+                  Next: Choose Format
+                </Text>
+                <Ionicons name="arrow-forward" size={18} color="white" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Format Selection Modal */}
+      <Modal
+        visible={showFormatSelectModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowFormatSelectModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, styles.formatModalContent]}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity
+                style={styles.modalBackButton}
+                onPress={() => {
+                  setShowFormatSelectModal(false);
+                  setShowGraphSelectModal(true);
+                }}
+              >
+                <Ionicons
+                  name="arrow-back"
+                  size={22}
+                  color={theme.colors.text}
+                />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Choose Export Format</Text>
+              <View style={{ width: 40 }} />
+            </View>
+
+            <Text style={styles.formatSubtitle}>
+              {selectedGraphs.length} graph
+              {selectedGraphs.length !== 1 ? "s" : ""} selected for export
+            </Text>
+
+            <View style={styles.formatOptions}>
+              <TouchableOpacity
+                style={styles.formatOption}
+                onPress={() => exportReport("pdf")}
+                disabled={isExporting}
+              >
+                <View
+                  style={[styles.formatIcon, { backgroundColor: "#F44336" }]}
+                >
+                  <Ionicons name="document-text" size={32} color="white" />
+                </View>
+                <Text style={styles.formatLabel}>PDF</Text>
+                <Text style={styles.formatDescription}>
+                  Best for printing and sharing. Includes headers and detailed
+                  summaries.
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.formatOption}
+                onPress={() => exportReport("word")}
+                disabled={isExporting}
+              >
+                <View
+                  style={[styles.formatIcon, { backgroundColor: "#2196F3" }]}
+                >
+                  <Ionicons name="document" size={32} color="white" />
+                </View>
+                <Text style={styles.formatLabel}>Word (HTML)</Text>
+                <Text style={styles.formatDescription}>
+                  Editable format with headers and summaries. Opens in Word or
+                  browser.
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.formatOption}
+                onPress={() => exportReport("excel")}
+                disabled={isExporting}
+              >
+                <View
+                  style={[styles.formatIcon, { backgroundColor: "#4CAF50" }]}
+                >
+                  <Ionicons name="grid" size={32} color="white" />
+                </View>
+                <Text style={styles.formatLabel}>Excel (CSV)</Text>
+                <Text style={styles.formatDescription}>
+                  Spreadsheet format for data analysis. Import into Excel for
+                  charts.
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {isExporting && (
+              <View style={styles.exportingOverlay}>
+                <ActivityIndicator size="large" color={theme.colors.primary} />
+                <Text style={styles.exportingText}>Generating report...</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1652,6 +2718,15 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.backgroundLight,
     justifyContent: "center",
     alignItems: "center",
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  downloadButton: {
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
   },
   // Time Range Selector Styles
   timeRangeContainer: {
@@ -2543,5 +3618,205 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     marginTop: 6,
     textAlign: "center",
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: theme.colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "85%",
+    paddingBottom: Platform.OS === "ios" ? 34 : 20,
+  },
+  formatModalContent: {
+    maxHeight: "70%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: theme.colors.text,
+    flex: 1,
+    textAlign: "center",
+  },
+  modalCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.backgroundLight,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.backgroundLight,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  selectAllContainer: {
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  selectAllButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    backgroundColor: theme.colors.backgroundLight,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  selectAllButtonActive: {
+    backgroundColor: `${theme.colors.primary}15`,
+    borderColor: theme.colors.primary,
+  },
+  selectAllText: {
+    fontSize: 14,
+    color: theme.colors.primary,
+    fontWeight: "500",
+  },
+  selectAllTextInactive: {
+    color: theme.colors.textMuted,
+  },
+  deselectAllText: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    fontWeight: "500",
+  },
+  graphListContainer: {
+    maxHeight: 350,
+    paddingHorizontal: 16,
+  },
+  graphOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    marginVertical: 4,
+    backgroundColor: theme.colors.backgroundLight,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  graphOptionSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: `${theme.colors.primary}10`,
+  },
+  graphCheckbox: {
+    marginRight: 12,
+  },
+  graphInfo: {
+    flex: 1,
+  },
+  graphLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: theme.colors.text,
+    marginBottom: 2,
+  },
+  graphDescription: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+  },
+  modalFooter: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  selectedCount: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+  },
+  proceedButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    gap: 8,
+  },
+  proceedButtonDisabled: {
+    backgroundColor: theme.colors.textMuted,
+    opacity: 0.6,
+  },
+  proceedButtonText: {
+    color: "white",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  formatSubtitle: {
+    textAlign: "center",
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    paddingVertical: 12,
+  },
+  formatOptions: {
+    padding: 16,
+    gap: 12,
+  },
+  formatOption: {
+    backgroundColor: theme.colors.backgroundLight,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  formatIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  formatLabel: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: 4,
+  },
+  formatDescription: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  exportingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  exportingText: {
+    color: theme.colors.text,
+    fontSize: 16,
+    marginTop: 16,
+    fontWeight: "500",
   },
 });
