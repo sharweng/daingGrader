@@ -17,6 +17,12 @@ export interface User {
   role: UserRole;
 }
 
+export interface ProductImage {
+  url: string;
+  public_id?: string;
+  uploaded_at?: string;
+}
+
 export interface Product {
   id: string;
   seller_id: string;
@@ -28,7 +34,7 @@ export interface Product {
   category_name: string;
   stock_qty: number;
   status: string;
-  images: string[];
+  images: ProductImage[];
   main_image_index: number;
   is_disabled: boolean;
   sold_count: number;

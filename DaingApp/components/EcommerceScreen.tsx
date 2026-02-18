@@ -76,16 +76,19 @@ export const EcommerceScreen: React.FC<EcommerceScreenProps> = ({
   };
 
   const renderProduct = ({ item }: { item: Product }) => {
-    const mainImage = item.images?.[item.main_image_index] || item.images?.[0];
+    const imageObj = item.images?.[item.main_image_index] || item.images?.[0];
+    const mainImageUrl = imageObj?.url;
     const hasValidImage =
-      mainImage && typeof mainImage === "string" && mainImage.length > 0;
+      mainImageUrl &&
+      typeof mainImageUrl === "string" &&
+      mainImageUrl.length > 0;
 
     return (
       <TouchableOpacity style={styles.productCard} activeOpacity={0.8}>
         <View style={styles.imageContainer}>
           {hasValidImage ? (
             <Image
-              source={{ uri: mainImage }}
+              source={{ uri: mainImageUrl }}
               style={styles.productImage}
               resizeMode="cover"
             />
