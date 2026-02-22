@@ -1,6 +1,6 @@
 // Default server base URL (can be customized in settings)
 export const DEFAULT_SERVER_BASE_URL =
-  "https://presenting-url-geneva-powerful.trycloudflare.com"; //http://192.168.1.109:8000
+  "https://exceptions-preview-definitely-walter.trycloudflare.com"; //http://192.168.1.109:8000
 
 // Web app URL for e-commerce (uses same backend)
 // Points to catalog page for direct shop access
